@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import { useAuthStore } from '@/stores/auth'
 import AdminView from '@/views/AdminView.vue'
+import KnowledgeView from '@/views/KnowledgeView.vue'
 import LoginView from '@/views/LoginView.vue'
 import VisitorView from '@/views/VisitorView.vue'
 
@@ -20,6 +21,12 @@ const router = createRouter({
       path: '/admin',
       name: 'admin',
       component: AdminView,
+      meta: { requiresAuth: true, role: 'admin' },
+    },
+    {
+      path: '/admin/knowledge',
+      name: 'admin-knowledge',
+      component: KnowledgeView,
       meta: { requiresAuth: true, role: 'admin' },
     },
   ],

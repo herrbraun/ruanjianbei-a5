@@ -58,6 +58,13 @@ def get_current_user(
     return user
 
 
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Restrict an endpoint to a persisted administrator account."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrator permission required")
+    return current_user
+
+
 @router.post("/visitor-login", response_model=AuthResponse)
 def visitor_login(payload: VisitorLoginRequest, request: Request, db: Session = Depends(get_db)) -> AuthResponse:
     user = create_visitor(db, nickname=payload.nickname, interest=payload.interest)
