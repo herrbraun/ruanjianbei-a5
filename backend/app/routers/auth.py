@@ -47,7 +47,12 @@ def get_current_user(
     if not payload or "user_id" not in payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    user = get_user_by_id(db, int(payload["user_id"]))
+    try:
+        user_id = int(payload["user_id"])
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from None
+
+    user = get_user_by_id(db, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user

@@ -25,8 +25,9 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore()
+  await authStore.initializeSession()
 
   if (to.name === 'login' && authStore.isAuthenticated) {
     return authStore.user?.role === 'admin' ? '/admin' : '/visitor'

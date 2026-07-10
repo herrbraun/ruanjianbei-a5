@@ -85,6 +85,18 @@
 
 默认管理员账号：`admin / 123456`。
 
+初始化脚本只会在管理员不存在时创建该账号；重复执行不会重置已有管理员的密码。
+
+## 认证测试
+
+```powershell
+cd backend
+pip install -r requirements-dev.txt
+pytest
+```
+
+认证测试使用内存 SQLite，不会写入本地 PostgreSQL。
+
 ## 环境变量
 
 真实密钥和数据库密码只放在本地 `.env`，不要提交 Git。示例配置见：

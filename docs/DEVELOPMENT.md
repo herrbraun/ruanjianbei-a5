@@ -50,6 +50,16 @@ python scripts\init_admin.py
 uvicorn app.main:app --reload
 ```
 
+认证测试：
+
+```powershell
+cd backend
+pip install -r requirements-dev.txt
+pytest
+```
+
+测试使用内存 SQLite，不会写入本地 PostgreSQL。
+
 协作者也可以用 SQL 文件直接初始化数据库：
 
 ```powershell

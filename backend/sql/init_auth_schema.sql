@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE INDEX IF NOT EXISTS ix_users_id ON users (id);
-CREATE INDEX IF NOT EXISTS ix_users_username ON users (username);
 
 CREATE TABLE IF NOT EXISTS visitor_profiles (
     id SERIAL PRIMARY KEY,
@@ -48,29 +47,25 @@ CREATE TABLE IF NOT EXISTS login_logs (
 CREATE INDEX IF NOT EXISTS ix_login_logs_id ON login_logs (id);
 CREATE INDEX IF NOT EXISTS ix_login_logs_user_id ON login_logs (user_id);
 
-WITH admin_user AS (
-    INSERT INTO users (username, password_hash, nickname, role)
-    VALUES (
-        'admin',
-        '$2b$12$wsX0PnbqAVJxcr6Lsky5GeZURKYW0HIn5JcCdkXCHJaltqeaTwrtu',
-        '系统管理员',
-        'admin'
-    )
-    ON CONFLICT (username) DO UPDATE
-    SET
-        password_hash = EXCLUDED.password_hash,
-        nickname = EXCLUDED.nickname,
-        role = EXCLUDED.role,
-        updated_at = CURRENT_TIMESTAMP
-    RETURNING id
+-- Only create the default administrator when it does not already exist.
+-- Re-running this script must not reset an existing administrator's password.
+INSERT INTO users (username, password_hash, nickname, role)
+VALUES (
+    'admin',
+    '$2b$12$wsX0PnbqAVJxcr6Lsky5GeZURKYW0HIn5JcCdkXCHJaltqeaTwrtu',
+    '系统管理员',
+    'admin'
 )
+ON CONFLICT (username) DO NOTHING;
+
 INSERT INTO admin_profiles (user_id, display_name)
-SELECT id, '系统管理员'
-FROM admin_user
-WHERE NOT EXISTS (
+SELECT users.id, '系统管理员'
+FROM users
+WHERE users.username = 'admin'
+AND NOT EXISTS (
     SELECT 1
     FROM admin_profiles
-    WHERE admin_profiles.user_id = admin_user.id
+    WHERE admin_profiles.user_id = users.id
 );
 
 COMMIT;

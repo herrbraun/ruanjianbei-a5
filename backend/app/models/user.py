@@ -13,7 +13,7 @@ class User(Base):
     __table_args__ = (CheckConstraint("role IN ('visitor', 'admin')", name="ck_users_role"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    username: Mapped[str | None] = mapped_column(String(100), unique=True, index=True, nullable=True)
+    username: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     nickname: Mapped[str | None] = mapped_column(String(100), nullable=True)
     role: Mapped[str] = mapped_column(String(20), nullable=False)

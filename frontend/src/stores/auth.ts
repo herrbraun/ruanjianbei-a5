@@ -5,26 +5,16 @@ import { adminLogin, getCurrentUser, type AuthResponse, type Role, type UserInfo
 interface AuthState {
   token: string | null
   user: UserInfo | null
+  sessionInitialized: boolean
 }
 
-function readStoredUser(): UserInfo | null {
-  const raw = localStorage.getItem('auth_user')
-  if (!raw) {
-    return null
-  }
-
-  try {
-    return JSON.parse(raw) as UserInfo
-  } catch {
-    localStorage.removeItem('auth_user')
-    return null
-  }
-}
+let sessionInitialization: Promise<void> | null = null
 
 export const useAuthStore = defineStore('auth', {
   state: (): AuthState => ({
     token: localStorage.getItem('auth_token'),
-    user: readStoredUser(),
+    user: null,
+    sessionInitialized: false,
   }),
   getters: {
     isAuthenticated: (state) => Boolean(state.token && state.user),
@@ -34,8 +24,8 @@ export const useAuthStore = defineStore('auth', {
     setSession(payload: AuthResponse) {
       this.token = payload.access_token
       this.user = payload.user
+      this.sessionInitialized = true
       localStorage.setItem('auth_token', payload.access_token)
-      localStorage.setItem('auth_user', JSON.stringify(payload.user))
     },
     async loginVisitor(payload: { nickname: string; interest?: string }) {
       const response = await visitorLogin(payload)
@@ -51,11 +41,41 @@ export const useAuthStore = defineStore('auth', {
       }
       const response = await getCurrentUser()
       this.user = response.data
-      localStorage.setItem('auth_user', JSON.stringify(response.data))
+    },
+    async initializeSession() {
+      if (this.sessionInitialized) {
+        return
+      }
+
+      if (sessionInitialization) {
+        return sessionInitialization
+      }
+
+      sessionInitialization = (async () => {
+        try {
+          if (this.token) {
+            await this.refreshCurrentUser()
+          } else {
+            this.user = null
+            localStorage.removeItem('auth_user')
+          }
+        } catch {
+          this.logout()
+        } finally {
+          this.sessionInitialized = true
+        }
+      })()
+
+      try {
+        await sessionInitialization
+      } finally {
+        sessionInitialization = null
+      }
     },
     logout() {
       this.token = null
       this.user = null
+      this.sessionInitialized = true
       localStorage.removeItem('auth_token')
       localStorage.removeItem('auth_user')
     },
