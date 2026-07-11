@@ -175,6 +175,38 @@ CREATE TABLE IF NOT EXISTS rag_query_logs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS guide_sessions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    scenic_area_id INTEGER NOT NULL REFERENCES scenic_areas(id) ON DELETE CASCADE,
+    initial_rag_profile_id INTEGER REFERENCES rag_profiles(id) ON DELETE SET NULL,
+    title VARCHAR(120),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_guide_sessions_user_id ON guide_sessions (user_id);
+CREATE INDEX IF NOT EXISTS ix_guide_sessions_scenic_area_id ON guide_sessions (scenic_area_id);
+CREATE INDEX IF NOT EXISTS ix_guide_sessions_initial_rag_profile_id ON guide_sessions (initial_rag_profile_id);
+CREATE INDEX IF NOT EXISTS ix_guide_sessions_user_updated ON guide_sessions (user_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS guide_messages (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES guide_sessions(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant')),
+    input_mode VARCHAR(20) CHECK (input_mode IS NULL OR input_mode IN ('text', 'voice')),
+    content TEXT NOT NULL,
+    rag_profile_id INTEGER REFERENCES rag_profiles(id) ON DELETE SET NULL,
+    sources JSONB,
+    answer_model VARCHAR(100),
+    answer_duration_ms INTEGER,
+    status VARCHAR(20) NOT NULL DEFAULT 'success' CHECK (status IN ('success', 'failed')),
+    error_message TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_guide_messages_session_id ON guide_messages (session_id);
+CREATE INDEX IF NOT EXISTS ix_guide_messages_rag_profile_id ON guide_messages (rag_profile_id);
+CREATE INDEX IF NOT EXISTS ix_guide_messages_session_created ON guide_messages (session_id, created_at);
+
 INSERT INTO scenic_areas (code, name, description)
 VALUES ('lingshan', '灵山胜境', '灵山胜境示范景区')
 ON CONFLICT (code) DO NOTHING;

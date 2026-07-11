@@ -9,8 +9,9 @@ from app.models.knowledge import (
     RagQueryLog,
     ScenicArea,
 )
+from app.models.guide import GuideMessage, GuideSession
 
 __all__ = [
     "AdminProfile", "KnowledgeBase", "KnowledgeChunk", "KnowledgeDocument", "KnowledgeEmbedding",
-    "LoginLog", "RagProfile", "RagProfileKnowledgeBase", "RagQueryLog", "ScenicArea", "User", "VisitorProfile",
+    "GuideMessage", "GuideSession", "LoginLog", "RagProfile", "RagProfileKnowledgeBase", "RagQueryLog", "ScenicArea", "User", "VisitorProfile",
 ]

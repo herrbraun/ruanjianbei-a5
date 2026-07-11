@@ -74,6 +74,10 @@ pytest
 psql -h localhost -p 5432 -U postgres -d ai_tour_guide -f backend/sql/init_auth_schema.sql
 ```
 
+### 游客语音导览依赖
+
+游客语音输入使用本机 `ffmpeg` 将浏览器录音转为 16 kHz 单声道 WAV，再调用百炼 ASR；启动前执行 `ffmpeg -version` 确认可用。若可执行文件不在 `PATH`，在本地 `backend/.env` 设置 `MEDIA_FFMPEG_BINARY` 为其完整路径。真实密钥只保留在被忽略的本地 `.env` 中。
+
 前端：
 
 ```powershell

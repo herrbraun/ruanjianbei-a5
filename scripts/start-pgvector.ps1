@@ -32,7 +32,16 @@ if ($dbHost -notin @("localhost", "127.0.0.1")) {
   throw "Docker pgvector only supports a local DATABASE_URL. Current host: $dbHost"
 }
 
+$previousErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 $existingBinding = docker port ai-tour-guide-postgres 5432/tcp 2>$null | Select-Object -First 1
+$dockerPortExitCode = $LASTEXITCODE
+$ErrorActionPreference = $previousErrorActionPreference
+if ($dockerPortExitCode -ne 0) {
+  # Docker returns exit code 1 when a pre-existing container is stopped. That is
+  # expected after Docker Desktop restarts; compose up below will restore it.
+  $existingBinding = $null
+}
 if ($existingBinding -match ":(\d+)$") {
   $selectedPort = [int]$Matches[1]
 } else {

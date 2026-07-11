@@ -16,6 +16,7 @@ from app.models.knowledge import (  # noqa: F401,E402
     KnowledgeBase, KnowledgeChunk, KnowledgeDocument, KnowledgeEmbedding,
     RagProfile, RagProfileKnowledgeBase, RagQueryLog, ScenicArea,
 )
+from app.models.guide import GuideMessage, GuideSession  # noqa: F401,E402
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.resolved_database_url)

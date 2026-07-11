@@ -104,3 +104,13 @@ Authorization: Bearer <jwt-token>
 
 - `GET /scenic-areas`
 - `POST /rag/search`：只接收景区编码、问题和可选 `top_k`，后端自动使用该景区当前正式 Profile。
+# 游客导览会话
+
+- `POST /api/guide/sessions`：游客为一个景区创建导览会话，提交 `{ "scenic_area_code": "lingshan" }`。
+- `GET /api/guide/sessions`：获取当前游客的会话。
+- `GET /api/guide/sessions/{session_id}/messages`：获取当前游客自己的会话消息。
+- `POST /api/guide/sessions/{session_id}/messages`：提交 `{ "content": "灵山大佛有什么文化意义？", "input_mode": "text" }`，返回游客问题、带资料引用的 AI 回答和实际 RAG Profile。
+- `POST /api/guide/asr`：以 `multipart/form-data` 上传短录音字段 `file`，返回识别后的文本；录音会临时转为 16 kHz WAV 并在请求结束后删除。
+- `POST /api/guide/messages/{message_id}/speech`：为当前游客自己的 AI 回答生成并返回音频流。
+
+导览接口仅对游客 JWT 开放。每次提问均解析所选景区当时的正式 RAG Profile，并在回答记录中保存 Profile 与来源快照。

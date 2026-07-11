@@ -36,6 +36,7 @@ class User(Base):
         uselist=False,
     )
     login_logs: Mapped[list["LoginLog"]] = relationship(back_populates="user")
+    guide_sessions: Mapped[list["GuideSession"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 class VisitorProfile(Base):

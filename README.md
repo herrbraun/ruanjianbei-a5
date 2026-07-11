@@ -7,6 +7,7 @@
 - 前端：Vue 3 + Vite + TypeScript + Vue Router + Pinia + Element Plus
 - 后端：FastAPI + SQLAlchemy + Alembic + PostgreSQL + JWT + bcrypt
 - 数据库：PostgreSQL，本地数据库名 `ai_tour_guide`
+- 游客导览：文字/语音提问、RAG 回答来源与百炼语音播报。
 
 ## 目录结构
 
