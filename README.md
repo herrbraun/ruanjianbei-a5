@@ -1,5 +1,13 @@
 # AI 数字人景区导览系统
 
+## 数字人首版
+
+管理端的“数字人形象管理”支持按“人物身份 + VRM 外观/服装版本”维护讲解员，控制每个景区可见版本、唯一默认人物和排序。游客端只会看到当前景区生效的版本，并会在浏览器本地记住个人选择。
+
+VRM 文件保存在本地 `backend/uploads/avatars/`，上传限制为 80MB，服务端检查 `.vrm` 与 GLB 文件头。执行 `alembic upgrade head` 后，可用 `backend/scripts/seed_avatars.py` 将十个自制灵山讲解员导入指定景区；TTS 播放会驱动 VRM 的待机、思考、聆听、眨眼和音量嘴型。WebGL 或模型加载失败时仍可使用文本与音频讲解。
+
+项目默认使用 `pgvector` 检索。向量在 PostgreSQL 中固定保存为 `DOUBLE PRECISION[]`（SQLite 测试环境保存为 JSON），因此切换 `RAG_VECTOR_BACKEND` 不会改变表结构。若本机 PostgreSQL 未安装该扩展，可仅在本地 `backend/.env` 或 `backend/.env.docker` 设置 `RAG_VECTOR_BACKEND=json`；该模式在应用侧计算余弦距离，并受 `RAG_JSON_CANDIDATE_LIMIT`（默认 2000 条）保护，适合比赛演示和中小型资料库。
+
 这是一个面向比赛作品的前后端单仓库骨架。第一阶段目标是打通游客/管理员登录、JWT 鉴权、角色路由守卫、PostgreSQL 用户表和登录日志，为后续数字人、RAG 知识库、语音交互和管理后台开发打地基。
 
 ## 技术栈
@@ -92,7 +100,7 @@
 
 ## pgvector
 
-本项目的 Docker 数据库镜像已经内置 pgvector。启动容器后，首次为知识库创建迁移时执行 `CREATE EXTENSION IF NOT EXISTS vector`，再由 Alembic 创建向量表和索引。不要将 PostgreSQL 数据目录、真实密码或 API Key 提交到 Git。
+本项目的 Docker 数据库镜像已经内置 pgvector。安装扩展后执行 `CREATE EXTENSION IF NOT EXISTS vector`，并保持 `RAG_VECTOR_BACKEND=pgvector`，检索将改由数据库计算余弦距离；未安装扩展时使用 `RAG_VECTOR_BACKEND=json`。两种模式共用同一份向量数据，无需重新建表或重建索引。不要将 PostgreSQL 数据目录、真实密码或 API Key 提交到 Git。
 
 ## 认证测试
 

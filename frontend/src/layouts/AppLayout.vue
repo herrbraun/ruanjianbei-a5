@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{
   title: string
-  description: string
+  description?: string
   roleLabel: string
 }>()
 
@@ -30,7 +30,7 @@ function logout() {
       <div>
         <p class="system-name">AI数字人景区导览系统</p>
         <h1>{{ props.title }}</h1>
-        <p>{{ props.description }}</p>
+        <p v-if="props.description">{{ props.description }}</p>
       </div>
 
       <div class="identity-panel">

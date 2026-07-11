@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Collection } from '@element-plus/icons-vue'
+import { Collection, UserFilled } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 
 import AppLayout from '@/layouts/AppLayout.vue'
@@ -14,6 +14,11 @@ const router = useRouter()
         <h2>RAG 知识库平台</h2>
         <p>配置景区、可复用知识库与正式导览 Profile，并上传资料进行向量化索引。</p>
         <el-button type="primary" :icon="Collection" @click="router.push('/admin/knowledge')">打开知识库平台</el-button>
+      </article>
+      <article class="workspace-panel workspace-panel-featured">
+        <h2>数字人形象管理</h2>
+        <p>配置讲解员中文名、服装版本、系统音色和景区上架状态，让游客自由选择已生效的数字人。</p>
+        <el-button type="primary" :icon="UserFilled" @click="router.push('/admin/avatars')">管理数字人</el-button>
       </article>
       <article class="workspace-panel">
         <h2>问答记录</h2>

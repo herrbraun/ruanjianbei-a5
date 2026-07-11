@@ -10,8 +10,9 @@ from app.models.knowledge import (
     ScenicArea,
 )
 from app.models.guide import GuideMessage, GuideSession
+from app.models.avatar import AvatarVariant, DigitalHuman, ScenicAvatarConfig
 
 __all__ = [
-    "AdminProfile", "KnowledgeBase", "KnowledgeChunk", "KnowledgeDocument", "KnowledgeEmbedding",
-    "GuideMessage", "GuideSession", "LoginLog", "RagProfile", "RagProfileKnowledgeBase", "RagQueryLog", "ScenicArea", "User", "VisitorProfile",
+    "AdminProfile", "AvatarVariant", "DigitalHuman", "KnowledgeBase", "KnowledgeChunk", "KnowledgeDocument", "KnowledgeEmbedding",
+    "GuideMessage", "GuideSession", "LoginLog", "RagProfile", "RagProfileKnowledgeBase", "RagQueryLog", "ScenicArea", "ScenicAvatarConfig", "User", "VisitorProfile",
 ]

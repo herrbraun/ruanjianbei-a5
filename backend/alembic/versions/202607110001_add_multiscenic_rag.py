@@ -6,7 +6,6 @@ Create Date: 2026-07-11 00:00:00
 """
 
 from alembic import op
-from pgvector.sqlalchemy import Vector
 import sqlalchemy as sa
 
 
@@ -17,7 +16,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
     op.create_table(
         "scenic_areas",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -118,7 +116,7 @@ def upgrade() -> None:
         sa.Column("chunk_id", sa.Integer(), sa.ForeignKey("knowledge_chunks.id", ondelete="CASCADE"), nullable=False, unique=True),
         sa.Column("embedding_model", sa.String(length=100), nullable=False, server_default=sa.text("'text-embedding-v4'")),
         sa.Column("dimensions", sa.Integer(), nullable=False, server_default=sa.text("1024")),
-        sa.Column("embedding", Vector(1024), nullable=False),
+        sa.Column("embedding", sa.JSON().with_variant(sa.ARRAY(sa.Float()), "postgresql"), nullable=False),
         sa.Column("indexed_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
     op.create_index("ix_knowledge_embeddings_chunk_id", "knowledge_embeddings", ["chunk_id"])

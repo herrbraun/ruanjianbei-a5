@@ -3,11 +3,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func, text
+from sqlalchemy import ARRAY, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+
+# The persisted embedding representation must not vary with a runtime setting.
+# PostgreSQL can store a numeric array without any extension; SQLite keeps the
+# same Python list as JSON for the test/local fallback.  pgvector, when
+# available, is only a retrieval accelerator and is applied at query time.
+EMBEDDING_STORAGE_TYPE = JSON().with_variant(ARRAY(Float), "postgresql")
 
 
 class ScenicArea(Base):
@@ -138,7 +144,7 @@ class KnowledgeEmbedding(Base):
     chunk_id: Mapped[int] = mapped_column(ForeignKey("knowledge_chunks.id", ondelete="CASCADE"), nullable=False, unique=True)
     embedding_model: Mapped[str] = mapped_column(String(100), nullable=False, server_default=text("'text-embedding-v4'"))
     dimensions: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1024"))
-    embedding: Mapped[Any] = mapped_column(Vector(1024), nullable=False)
+    embedding: Mapped[Any] = mapped_column(EMBEDDING_STORAGE_TYPE, nullable=False)
     indexed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     chunk: Mapped[KnowledgeChunk] = relationship(back_populates="embedding")

@@ -62,5 +62,9 @@ export const guideApi = {
     form.append('file', file, 'guide-recording.webm')
     return http.post<AsrResult>('/guide/asr', form)
   },
-  synthesize: (messageId: number) => http.post<Blob>(`/guide/messages/${messageId}/speech`, undefined, { responseType: 'blob' }),
+  synthesize: (messageId: number, avatarVariantId?: number) =>
+    http.post<Blob>(`/guide/messages/${messageId}/speech`, undefined, {
+      params: avatarVariantId ? { avatar_variant_id: avatarVariantId } : undefined,
+      responseType: 'blob',
+    }),
 }

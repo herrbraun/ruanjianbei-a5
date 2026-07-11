@@ -150,7 +150,12 @@ def recognize_speech(audio: bytes, content_type: str | None) -> RecognizedSpeech
     )
 
 
-def synthesize_speech(text: str) -> SynthesizedSpeech:
+def synthesize_speech(
+    text: str,
+    *,
+    voice: str | None = None,
+    instructions: str | None = None,
+) -> SynthesizedSpeech:
     text = strip_source_markers(text)
     if not text.strip():
         raise SpeechError("没有可播报的文本")
@@ -165,9 +170,9 @@ def synthesize_speech(text: str) -> SynthesizedSpeech:
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json={
                     "model": settings.guide_tts_model,
-                    "input": {"text": text, "voice": settings.tts_voice, "language_type": "Chinese"},
+                    "input": {"text": text, "voice": voice or settings.tts_voice, "language_type": "Chinese"},
                     "parameters": {
-                        "instructions": settings.tts_instructions,
+                        "instructions": instructions or settings.tts_instructions,
                         "optimize_instructions": True,
                     },
                 },

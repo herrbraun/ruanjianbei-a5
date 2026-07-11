@@ -1,5 +1,21 @@
 # API 约定
 
+## 数字人管理与游客端
+
+所有 `/admin/avatars/*` 接口要求管理员 Bearer Token：
+
+- `GET /admin/avatars/voices`：读取允许配置的系统音色。
+- `GET|POST /admin/avatars/humans`、`PATCH|DELETE /admin/avatars/humans/{id}`：管理人物中文名、定位、音色、讲解风格与启停状态。
+- `GET /admin/avatars/scenic-configs?scenic_area_id={id}`：读取景区上架版本。
+- `POST /admin/avatars/variants`：以 `multipart/form-data` 上传 `.vrm`，包含人物、景区、服装、版本、缩略图、上架/默认/排序与文件字段。文件最大 80MB，服务端校验 GLB 文件头并随机命名存储。
+- `PATCH|DELETE /admin/avatars/variants/{id}`、`PATCH /admin/avatars/scenic-configs/{id}`：编辑外观资料、删除外观或控制当前景区的上架、默认与排序。
+
+游客端接口要求游客 JWT：
+
+- `GET /avatars/scenic-areas/{scenic_area_code}`：只返回当前景区已上架、已启用人物的外观列表及默认版本。
+- `GET /avatars/scenic-areas/{scenic_area_code}/variants/{id}/asset`：仅提供当前景区已上架版本的 VRM 二进制文件。
+- `POST /guide/messages/{message_id}/speech?avatar_variant_id={id}`：若传入版本 ID，后端先验证其已在当前会话景区上架，再使用该人物配置的系统音色与讲解风格；未传时回退到景区默认数字人，保持旧调用兼容。
+
 后端默认地址：`http://localhost:8000/api`
 
 ## 游客登录

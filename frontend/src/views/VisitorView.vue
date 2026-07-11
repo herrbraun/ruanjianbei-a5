@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ChatDotRound, Compass, Document, Loading, Microphone, Position, VideoPlay } from '@element-plus/icons-vue'
+import { Compass, Document, Loading, Microphone, Position, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
+import AvatarViewer from '@/components/AvatarViewer.vue'
+import { avatarApi, avatarAssetUrl, type ScenicAvatar } from '@/api/avatar'
 import { guideApi, type GuideMessage, type GuideSource } from '@/api/guide'
 import { knowledgeApi, type ScenicArea } from '@/api/knowledge'
 import AppLayout from '@/layouts/AppLayout.vue'
@@ -11,6 +13,7 @@ import { useGuideStore } from '@/stores/guide'
 const guideStore = useGuideStore()
 const scenicAreas = ref<ScenicArea[]>([])
 const selectedScenicCode = ref('')
+const guideStarted = ref(false)
 const draft = ref('')
 const draftInputMode = ref<'text' | 'voice'>('text')
 const loadingAreas = ref(false)
@@ -21,6 +24,11 @@ const playingMessageId = ref<number>()
 const speechLoadingMessageId = ref<number>()
 const activeAudioMessageId = ref<number>()
 const conversationElement = ref<HTMLElement>()
+const scenicAvatars = ref<ScenicAvatar[]>([])
+const selectedAvatarId = ref<number>()
+const avatarListLoading = ref(false)
+const avatarRenderError = ref('')
+const audioLevel = ref(0)
 
 let mediaRecorder: MediaRecorder | undefined
 let mediaStream: MediaStream | undefined
@@ -30,10 +38,27 @@ let recordLimitTimer: ReturnType<typeof setTimeout> | undefined
 let audio: HTMLAudioElement | undefined
 let activeAudioUrl: string | undefined
 let playbackGeneration = 0
+let audioContext: AudioContext | undefined
+let audioAnalyser: AnalyserNode | undefined
+let audioSource: MediaElementAudioSourceNode | undefined
+let analysedAudio: HTMLAudioElement | undefined
+let audioAnimationFrame: number | undefined
 
 const selectedScenicArea = computed(() => scenicAreas.value.find((area) => area.code === selectedScenicCode.value))
 const messages = computed(() => guideStore.messages)
-const sessionReady = computed(() => Boolean(guideStore.activeSession && !guideStore.loadingMessages))
+const sessionReady = computed(() => guideStarted.value && Boolean(guideStore.activeSession && !guideStore.loadingMessages))
+const activeAvatar = computed(() => scenicAvatars.value.find((avatar) => avatar.id === selectedAvatarId.value))
+const avatarAsset = computed(() => (
+  selectedScenicCode.value && activeAvatar.value
+    ? avatarAssetUrl(selectedScenicCode.value, activeAvatar.value.id)
+    : null
+))
+const avatarMotion = computed<'idle' | 'listening' | 'thinking' | 'speaking'>(() => {
+  if (recording.value) return 'listening'
+  if (guideStore.sending || speechLoadingMessageId.value) return 'thinking'
+  if (playingMessageId.value) return 'speaking'
+  return 'idle'
+})
 
 function errorText(error: unknown, fallback: string) {
   const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
@@ -69,6 +94,41 @@ async function loadScenicAreas() {
   }
 }
 
+function avatarStorageKey(scenicCode: string) {
+  return `ai-tour-guide:avatar:${scenicCode}`
+}
+
+async function loadScenicAvatars() {
+  const scenicCode = selectedScenicCode.value
+  scenicAvatars.value = []
+  selectedAvatarId.value = undefined
+  avatarRenderError.value = ''
+  if (!scenicCode) return
+  avatarListLoading.value = true
+  try {
+    const { data } = await avatarApi.listPublicScenicAvatars(scenicCode)
+    if (scenicCode !== selectedScenicCode.value) return
+    scenicAvatars.value = data.avatars
+    const storedId = Number(localStorage.getItem(avatarStorageKey(scenicCode)))
+    const storedAvatarExists = data.avatars.some((avatar) => avatar.id === storedId)
+    selectedAvatarId.value = storedAvatarExists
+      ? storedId
+      : data.default_variant_id || data.avatars[0]?.id
+  } catch (error) {
+    avatarRenderError.value = errorText(error, '数字人列表暂时不可用，仍可继续文字与语音讲解')
+  } finally {
+    avatarListLoading.value = false
+  }
+}
+
+function onAvatarSelectionChange(avatarId: number | string) {
+  const avatar = scenicAvatars.value.find((item) => item.id === Number(avatarId))
+  if (!avatar) return
+  stopAudio()
+  avatarRenderError.value = ''
+  localStorage.setItem(avatarStorageKey(selectedScenicCode.value), String(avatar.id))
+}
+
 async function openGuideSession() {
   if (!selectedScenicCode.value) return
   try {
@@ -78,6 +138,21 @@ async function openGuideSession() {
   } catch (error) {
     ElMessage.error(errorText(error, '无法打开该景区的导览会话'))
   }
+}
+
+async function startGuide() {
+  if (!selectedScenicCode.value) {
+    ElMessage.warning('请先选择景区')
+    return
+  }
+  guideStarted.value = true
+  await Promise.all([openGuideSession(), loadScenicAvatars()])
+  if (!guideStore.activeSession) guideStarted.value = false
+}
+
+function returnToScenicSelection() {
+  stopAudio()
+  guideStarted.value = false
 }
 
 async function sendQuestion() {
@@ -178,12 +253,68 @@ function stopAudio() {
   if (audio) {
     audio.pause()
   }
+  stopAudioAnalysis()
   if (activeAudioUrl) URL.revokeObjectURL(activeAudioUrl)
   audio = undefined
   activeAudioUrl = undefined
   playingMessageId.value = undefined
   speechLoadingMessageId.value = undefined
   activeAudioMessageId.value = undefined
+}
+
+function stopAudioAnalysis() {
+  pauseAudioAnalysis()
+  audioSource?.disconnect()
+  audioAnalyser?.disconnect()
+  audioSource = undefined
+  audioAnalyser = undefined
+  analysedAudio = undefined
+}
+
+function pauseAudioAnalysis() {
+  if (audioAnimationFrame) cancelAnimationFrame(audioAnimationFrame)
+  audioAnimationFrame = undefined
+  audioLevel.value = 0
+}
+
+async function startAudioAnalysis(target: HTMLAudioElement) {
+  pauseAudioAnalysis()
+  const AudioContextConstructor = window.AudioContext || (window as Window & {
+    webkitAudioContext?: typeof AudioContext
+  }).webkitAudioContext
+  if (!AudioContextConstructor) return
+  try {
+    audioContext ||= new AudioContextConstructor()
+    if (analysedAudio !== target || !audioSource || !audioAnalyser) {
+      audioSource?.disconnect()
+      audioAnalyser?.disconnect()
+      audioSource = audioContext.createMediaElementSource(target)
+      audioAnalyser = audioContext.createAnalyser()
+      audioAnalyser.fftSize = 512
+      audioSource.connect(audioAnalyser)
+      audioAnalyser.connect(audioContext.destination)
+      analysedAudio = target
+    }
+    if (audioContext.state === 'suspended') await audioContext.resume()
+    const samples = new Uint8Array(audioAnalyser.fftSize)
+    const sampleAudio = () => {
+      if (!audioAnalyser || target.paused) {
+        audioLevel.value = 0
+        return
+      }
+      audioAnalyser.getByteTimeDomainData(samples)
+      let energy = 0
+      for (const sample of samples) {
+        const normalized = (sample - 128) / 128
+        energy += normalized * normalized
+      }
+      audioLevel.value = Math.min(1, Math.sqrt(energy / samples.length) * 6)
+      audioAnimationFrame = requestAnimationFrame(sampleAudio)
+    }
+    sampleAudio()
+  } catch {
+    stopAudioAnalysis()
+  }
 }
 
 async function playMessage(message: GuideMessage) {
@@ -196,6 +327,7 @@ async function playMessage(message: GuideMessage) {
       try {
         await audio.play()
         playingMessageId.value = message.id
+        void startAudioAnalysis(audio)
       } catch {
         ElMessage.info('音频已准备好，请点击播放讲解')
       }
@@ -203,6 +335,7 @@ async function playMessage(message: GuideMessage) {
     }
     audio.pause()
     playingMessageId.value = undefined
+    pauseAudioAnalysis()
     return
   }
 
@@ -210,7 +343,7 @@ async function playMessage(message: GuideMessage) {
   const generation = playbackGeneration
   speechLoadingMessageId.value = message.id
   try {
-    const response = await guideApi.synthesize(message.id)
+    const response = await guideApi.synthesize(message.id, selectedAvatarId.value)
     if (generation !== playbackGeneration) return
     activeAudioUrl = URL.createObjectURL(response.data)
     audio = new Audio(activeAudioUrl)
@@ -226,6 +359,7 @@ async function playMessage(message: GuideMessage) {
     }
     try {
       await audio.play()
+      void startAudioAnalysis(audio)
     } catch {
       playingMessageId.value = undefined
       ElMessage.info('音频已准备好，点击播放讲解即可收听')
@@ -244,7 +378,10 @@ function speechButtonText(message: GuideMessage) {
   return '播放讲解'
 }
 
-watch(selectedScenicCode, () => void openGuideSession())
+function onAvatarRenderError(message: string) {
+  avatarRenderError.value = `${message}，已切换为静态展示，不影响文字与语音讲解。`
+}
+
 watch(messages, () => void scrollToLatest(), { deep: true })
 
 onMounted(() => void loadScenicAreas())
@@ -257,12 +394,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AppLayout title="智能导览会话" description="用文字或语音提问，随时获取景区讲解。" role-label="当前身份：游客">
+  <AppLayout title="智能导览会话" role-label="当前身份：游客">
     <section class="guide-page" v-loading="loadingAreas">
-      <aside class="guide-context-card">
+      <article v-if="!guideStarted" class="guide-launch-card">
         <p class="eyebrow">SCENIC CONTEXT</p>
-        <h2>从一座景区开始</h2>
-        <el-select v-model="selectedScenicCode" class="guide-area-select" placeholder="选择景区" :disabled="loadingAreas">
+        <h2>先选一座景区</h2>
+        <p>从景区文化、路线安排到演出时间，让讲解员陪你慢慢逛。</p>
+        <el-select v-model="selectedScenicCode" class="guide-area-select" placeholder="请选择景区" :disabled="loadingAreas">
           <el-option v-for="area in scenicAreas" :key="area.code" :label="area.name" :value="area.code" />
         </el-select>
         <div v-if="selectedScenicArea" class="guide-scenic-note">
@@ -272,26 +410,56 @@ onBeforeUnmount(() => {
             <span>{{ selectedScenicArea.description || '已进入数字导览上下文' }}</span>
           </div>
         </div>
-      </aside>
+        <el-button class="guide-start-button" type="primary" size="large" :disabled="!selectedScenicCode || loadingAreas" @click="startGuide">
+          开始导览 <Compass />
+        </el-button>
+      </article>
 
-      <article class="guide-conversation-card">
+      <article v-else class="guide-conversation-card">
         <header class="guide-conversation-heading">
           <div>
             <p class="eyebrow">ASK · LISTEN · EXPLORE</p>
             <h2>{{ selectedScenicArea?.name || '景区导览' }}</h2>
           </div>
-          <span class="guide-session-status" :class="{ ready: sessionReady }">
-            <i /> {{ sessionReady ? '导览已就绪' : '正在连接导览会话' }}
-          </span>
+          <div class="guide-conversation-tools">
+            <el-button text @click="returnToScenicSelection">切换景区</el-button>
+            <span class="guide-session-status" :class="{ ready: sessionReady }"><i />{{ sessionReady ? '导览已就绪' : '正在连接' }}</span>
+          </div>
         </header>
 
         <div ref="conversationElement" class="guide-message-stream">
+          <section class="guide-assistant-intro" :aria-busy="avatarListLoading">
+            <div class="guide-assistant-intro-top">
+              <div class="guide-avatar-picker" v-if="scenicAvatars.length">
+                <label for="visitor-avatar-select">选择讲解员</label>
+                <el-select id="visitor-avatar-select" v-model="selectedAvatarId" placeholder="选择人物" @change="onAvatarSelectionChange">
+                  <el-option v-for="avatar in scenicAvatars" :key="avatar.id" :label="`${avatar.name} · ${avatar.outfit_name}`" :value="avatar.id" />
+                </el-select>
+              </div>
+              <span v-else-if="!avatarListLoading" class="guide-avatar-empty">当前景区尚未上架数字人，仍可使用文字与语音导览。</span>
+            </div>
+            <div class="guide-assistant-presence">
+              <div class="guide-avatar-canvas guide-assistant-avatar" :class="`is-${avatarMotion}`">
+                <AvatarViewer :asset-url="avatarAsset" :state="avatarMotion" :audio-level="audioLevel" @error="onAvatarRenderError">
+                  <div class="guide-avatar-fallback">
+                    <span>{{ activeAvatar?.name?.slice(-1) || '灵' }}</span>
+                    <strong>{{ activeAvatar?.name || '数字讲解员' }}</strong>
+                    <small>文字与语音导览始终可用</small>
+                  </div>
+                </AvatarViewer>
+                <span class="guide-avatar-state"><i />{{ avatarMotion === 'speaking' ? '正在讲解' : avatarMotion === 'thinking' ? '正在思考' : avatarMotion === 'listening' ? '正在聆听' : '随时为您服务' }}</span>
+              </div>
+              <div class="guide-welcome-bubble">
+                <span>{{ activeAvatar?.name || '景区讲解员' }}</span>
+                <strong>欢迎来到{{ selectedScenicArea?.name || '景区' }}！</strong>
+                <p>我是你的数字讲解员。想了解景点故事、游览路线，还是今天的演出安排？</p>
+              </div>
+            </div>
+            <p v-if="avatarRenderError" class="guide-avatar-error">{{ avatarRenderError }}</p>
+          </section>
+
           <div v-if="guideStore.loadingMessages" class="guide-empty-state"><el-icon class="is-loading"><Loading /></el-icon>正在恢复导览会话…</div>
-          <div v-else-if="!messages.length" class="guide-empty-state guide-welcome-state">
-            <span class="guide-welcome-icon"><ChatDotRound /></span>
-            <strong>你好，我是你的景区导览助手。</strong>
-            <p>试着问问“灵山大佛有什么文化意义？”或点击麦克风直接说出问题。</p>
-          </div>
+          <p v-else-if="!messages.length" class="guide-question-nudge">试着问问“这里有哪些必看的景点？”也可以按下麦克风直接说出来。</p>
 
           <article v-for="message in messages" :key="message.id" class="guide-message" :class="`is-${message.role}`">
             <div class="guide-message-avatar">{{ message.role === 'user' ? '游' : '导' }}</div>

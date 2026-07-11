@@ -8,9 +8,10 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
+from app.config import settings
 from app.database import Base
 from app.crud.knowledge import delete_document
-from app.models.knowledge import KnowledgeBase, KnowledgeChunk, KnowledgeDocument, KnowledgeEmbedding, RagProfile, ScenicArea
+from app.models.knowledge import KnowledgeBase, KnowledgeChunk, KnowledgeDocument, KnowledgeEmbedding, RagProfile, RagProfileKnowledgeBase, ScenicArea
 from app.services.knowledge_indexer import content_sha256, index_document
 from app.services.knowledge_parser import ParsedChunk
 from app.services.retrieval import RetrievalError, search_profile
@@ -176,6 +177,106 @@ def test_profile_cannot_search_another_scenic_area() -> None:
             assert "不属于所选景区" in str(exc)
         else:
             raise AssertionError("cross-scenic retrieval must be rejected")
+    finally:
+        db.close()
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+def test_json_vector_fallback_ranks_embeddings_by_cosine_similarity() -> None:
+    engine, db = _session()
+    try:
+        scenic = ScenicArea(code="json-vector", name="JSON Vector Scenic")
+        base = KnowledgeBase(code="json-vector-base", name="JSON Vector Base")
+        db.add_all([scenic, base])
+        db.commit()
+        profile = RagProfile(scenic_area_id=scenic.id, name="JSON Profile", status="active", top_k=2)
+        document = KnowledgeDocument(
+            knowledge_base_id=base.id,
+            original_filename="guide.txt",
+            stored_filename="guide.txt",
+            mime_type="text/plain",
+            content_hash="f" * 64,
+            status="indexed",
+        )
+        db.add_all([profile, document])
+        db.commit()
+        db.add(RagProfileKnowledgeBase(rag_profile_id=profile.id, knowledge_base_id=base.id, retrieval_priority=10))
+        first = KnowledgeChunk(
+            document_id=document.id,
+            knowledge_base_id=base.id,
+            ordinal=1,
+            content="closest match",
+            content_hash="1" * 64,
+        )
+        second = KnowledgeChunk(
+            document_id=document.id,
+            knowledge_base_id=base.id,
+            ordinal=2,
+            content="different match",
+            content_hash="2" * 64,
+        )
+        db.add_all([first, second])
+        db.flush()
+        db.add_all([
+            KnowledgeEmbedding(chunk_id=first.id, embedding_model="test", dimensions=2, embedding=[1.0, 0.0]),
+            KnowledgeEmbedding(chunk_id=second.id, embedding_model="test", dimensions=2, embedding=[0.0, 1.0]),
+        ])
+        db.commit()
+
+        with (
+            patch.object(settings, "rag_vector_backend", "json"),
+            patch("app.services.retrieval.embed_query", return_value=[1.0, 0.0]),
+        ):
+            result = search_profile(db, scenic, profile, "closest", 2)
+
+        assert [hit["content"] for hit in result["hits"]] == ["closest match", "different match"]
+        assert result["hits"][0]["score"] == 1.0
+    finally:
+        db.close()
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
+def test_json_vector_fallback_rejects_oversized_candidate_set() -> None:
+    engine, db = _session()
+    try:
+        scenic = ScenicArea(code="json-limit", name="JSON Limit Scenic")
+        base = KnowledgeBase(code="json-limit-base", name="JSON Limit Base")
+        db.add_all([scenic, base])
+        db.commit()
+        profile = RagProfile(scenic_area_id=scenic.id, name="JSON Limit Profile", status="active", top_k=1)
+        document = KnowledgeDocument(
+            knowledge_base_id=base.id,
+            original_filename="guide.txt",
+            stored_filename="guide.txt",
+            mime_type="text/plain",
+            content_hash="9" * 64,
+            status="indexed",
+        )
+        db.add_all([profile, document, RagProfileKnowledgeBase(rag_profile=profile, knowledge_base=base)])
+        db.flush()
+        first = KnowledgeChunk(document_id=document.id, knowledge_base_id=base.id, ordinal=1, content="first", content_hash="a" * 64)
+        second = KnowledgeChunk(document_id=document.id, knowledge_base_id=base.id, ordinal=2, content="second", content_hash="b" * 64)
+        db.add_all([first, second])
+        db.flush()
+        db.add_all([
+            KnowledgeEmbedding(chunk_id=first.id, embedding_model="test", dimensions=2, embedding=[1.0, 0.0]),
+            KnowledgeEmbedding(chunk_id=second.id, embedding_model="test", dimensions=2, embedding=[0.0, 1.0]),
+        ])
+        db.commit()
+
+        with (
+            patch.object(settings, "rag_vector_backend", "json"),
+            patch.object(settings, "rag_json_candidate_limit", 1),
+            patch("app.services.retrieval.embed_query", return_value=[1.0, 0.0]),
+        ):
+            try:
+                search_profile(db, scenic, profile, "limit", 1)
+            except RetrievalError as exc:
+                assert "最多支持 1 条候选资料" in str(exc)
+            else:
+                raise AssertionError("oversized JSON candidate set must be rejected")
     finally:
         db.close()
         Base.metadata.drop_all(engine)

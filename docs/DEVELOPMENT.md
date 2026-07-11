@@ -1,5 +1,25 @@
 # 开发说明
 
+## 数字人本地素材
+
+管理员可从“数字人形象管理”上传 `.vrm`。模型保存在 `backend/uploads/avatars/`，该目录只属于本地媒体数据，不能提交 Git。上传限制为 80MB，服务端会检查 `.vrm` 后缀和 GLB `glTF` 文件头。
+
+执行迁移后，可用以下命令把十个自制灵山讲解员导入默认灵山景区：
+
+```powershell
+cd backend
+python scripts\seed_avatars.py --source "$HOME\Documents" --scenic-code lingshan
+```
+
+可在本地 `backend/.env` 配置音色白名单和上传上限；不要把真实密钥写进示例文件：
+
+```env
+GUIDE_TTS_VOICE_OPTIONS=Cherry
+AVATAR_MAX_UPLOAD_BYTES=83886080
+```
+
+游客端用 Three.js 与 `@pixiv/three-vrm` 渲染 VRM，并用 TTS 音频的 `AnalyserNode` 音量驱动 `aa` 嘴型；模型或 WebGL 不可用时会保留文字与语音讲解并显示静态卡片。
+
 ## 第一阶段边界
 
 当前骨架只实现登录、鉴权、路由和数据库基础表。暂不实现 RAG、数字人、语音、知识库管理和大屏业务。
@@ -17,6 +37,8 @@ DASHSCOPE_BASE_URL=https://your-workspace.cn-beijing.maas.aliyuncs.com/api/v1
 LLM_CHAT_MODEL=qwen-plus
 LLM_EMBEDDING_MODEL=text-embedding-v4
 LLM_RERANK_MODEL=qwen3-rerank
+RAG_VECTOR_BACKEND=pgvector
+RAG_JSON_CANDIDATE_LIMIT=2000
 ASR_MODEL=fun-asr
 TTS_MODEL=cosyvoice-v3.5-plus
 ```

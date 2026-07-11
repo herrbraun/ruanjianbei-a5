@@ -4,8 +4,6 @@
 
 BEGIN;
 
-CREATE EXTENSION IF NOT EXISTS vector;
-
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(100) UNIQUE,
@@ -157,7 +155,7 @@ CREATE TABLE IF NOT EXISTS knowledge_embeddings (
     chunk_id INTEGER UNIQUE NOT NULL REFERENCES knowledge_chunks(id) ON DELETE CASCADE,
     embedding_model VARCHAR(100) NOT NULL DEFAULT 'text-embedding-v4',
     dimensions INTEGER NOT NULL DEFAULT 1024,
-    embedding vector(1024) NOT NULL,
+    embedding DOUBLE PRECISION[] NOT NULL,
     indexed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -174,6 +172,52 @@ CREATE TABLE IF NOT EXISTS rag_query_logs (
     error_message TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS digital_humans (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(80) NOT NULL UNIQUE,
+    gender VARCHAR(20) NOT NULL DEFAULT 'unspecified' CHECK (gender IN ('female', 'male', 'unspecified')),
+    role_title VARCHAR(120) NOT NULL,
+    introduction TEXT,
+    tts_voice VARCHAR(100) NOT NULL,
+    tts_instructions TEXT,
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS avatar_variants (
+    id SERIAL PRIMARY KEY,
+    digital_human_id INTEGER NOT NULL REFERENCES digital_humans(id) ON DELETE CASCADE,
+    outfit_name VARCHAR(120) NOT NULL,
+    version VARCHAR(40) NOT NULL DEFAULT 'v1',
+    original_filename VARCHAR(255) NOT NULL,
+    stored_filename VARCHAR(255) NOT NULL UNIQUE,
+    content_hash VARCHAR(64) NOT NULL,
+    file_size INTEGER NOT NULL,
+    thumbnail_url VARCHAR(500),
+    validation_status VARCHAR(20) NOT NULL DEFAULT 'ready' CHECK (validation_status IN ('ready', 'failed')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_avatar_variants_human_outfit_version UNIQUE (digital_human_id, outfit_name, version)
+);
+CREATE INDEX IF NOT EXISTS ix_avatar_variants_digital_human_id ON avatar_variants (digital_human_id);
+
+CREATE TABLE IF NOT EXISTS scenic_avatar_configs (
+    id SERIAL PRIMARY KEY,
+    scenic_area_id INTEGER NOT NULL REFERENCES scenic_areas(id) ON DELETE CASCADE,
+    avatar_variant_id INTEGER NOT NULL REFERENCES avatar_variants(id) ON DELETE CASCADE,
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_scenic_avatar_configs_area_variant UNIQUE (scenic_area_id, avatar_variant_id)
+);
+CREATE INDEX IF NOT EXISTS ix_scenic_avatar_configs_scenic_area_id ON scenic_avatar_configs (scenic_area_id);
+CREATE INDEX IF NOT EXISTS ix_scenic_avatar_configs_avatar_variant_id ON scenic_avatar_configs (avatar_variant_id);
+CREATE INDEX IF NOT EXISTS ix_scenic_avatar_configs_area_enabled_sort ON scenic_avatar_configs (scenic_area_id, is_enabled, sort_order);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_scenic_avatar_configs_one_default
+    ON scenic_avatar_configs (scenic_area_id) WHERE is_default AND is_enabled;
 
 CREATE TABLE IF NOT EXISTS guide_sessions (
     id SERIAL PRIMARY KEY,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from app.crud.guide import (
     list_user_guide_sessions,
     touch_guide_session,
 )
+from app.crud.avatar import default_scenic_avatar_config, get_scenic_avatar_config
 from app.crud.knowledge import get_active_profile, get_scenic_area_by_code, get_scenic_area_by_id
 from app.database import get_db
 from app.models.guide import GuideMessage, GuideSession
@@ -193,6 +194,7 @@ async def transcribe_audio(
 @router.post("/messages/{message_id}/speech")
 async def synthesize_message(
     message_id: int,
+    avatar_variant_id: int | None = Query(default=None),
     current_user: User = Depends(require_visitor),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -201,8 +203,25 @@ async def synthesize_message(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guide answer not found")
     if message.status != "success":
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="This answer cannot be spoken")
+    session = _session_or_404(db, message.session_id, current_user.id)
+    avatar_config = (
+        get_scenic_avatar_config(db, session.scenic_area_id, avatar_variant_id, enabled_only=True)
+        if avatar_variant_id is not None
+        else default_scenic_avatar_config(db, session.scenic_area_id)
+    )
+    if avatar_variant_id is not None and avatar_config is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="所选数字人未在当前景区上架")
     try:
-        synthesized = await run_in_threadpool(synthesize_speech, message.content)
+        if avatar_config is None:
+            synthesized = await run_in_threadpool(synthesize_speech, message.content)
+        else:
+            human = avatar_config.avatar_variant.digital_human
+            synthesized = await run_in_threadpool(
+                synthesize_speech,
+                message.content,
+                voice=human.tts_voice,
+                instructions=human.tts_instructions,
+            )
     except SpeechError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return Response(

@@ -17,6 +17,7 @@ from app.models.knowledge import (  # noqa: F401,E402
     RagProfile, RagProfileKnowledgeBase, RagQueryLog, ScenicArea,
 )
 from app.models.guide import GuideMessage, GuideSession  # noqa: F401,E402
+from app.models.avatar import AvatarVariant, DigitalHuman, ScenicAvatarConfig  # noqa: F401,E402
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.resolved_database_url)
