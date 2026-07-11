@@ -35,13 +35,15 @@
 
    `frontend/.env` 默认指向 `http://localhost:8000/api`，本地端口不变时无需修改。
 
-2. 创建数据库：
+2. 启动本地 pgvector PostgreSQL：
 
    ```powershell
-   .\scripts\create-database.ps1
+   .\scripts\start-pgvector.ps1
    ```
 
-   如果协作者不想跑 Alembic，也可以直接执行 SQL 初始化表结构和默认管理员：
+   脚本会复用 `backend/.env` 中的数据库账号、密码、库名和首选端口；如果首选端口已被占用，会自动在 `5433-5450` 中选择空闲端口，并生成被 Git 忽略的 `backend/.env.docker` 供后端和 Alembic 使用。数据库数据保存在项目的 `.local-data/pgvector-postgres/`，不会提交 Git。
+
+   如果协作者不使用 Docker，也可以创建本机数据库后执行 SQL 初始化表结构和默认管理员：
 
    ```powershell
    psql -h localhost -p 5432 -U postgres -d ai_tour_guide -f backend/sql/init_auth_schema.sql
@@ -86,6 +88,10 @@
 默认管理员账号：`admin / 123456`。
 
 初始化脚本只会在管理员不存在时创建该账号；重复执行不会重置已有管理员的密码。
+
+## pgvector
+
+本项目的 Docker 数据库镜像已经内置 pgvector。启动容器后，首次为知识库创建迁移时执行 `CREATE EXTENSION IF NOT EXISTS vector`，再由 Alembic 创建向量表和索引。不要将 PostgreSQL 数据目录、真实密码或 API Key 提交到 Git。
 
 ## 认证测试
 

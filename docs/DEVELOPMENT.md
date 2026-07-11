@@ -41,6 +41,14 @@ Copy-Item frontend\.env.example frontend\.env
 
 再按本机 PostgreSQL 密码和阿里云百炼 API Key 修改 `backend/.env`。真实密钥只保存在本地 `.env`，不要提交到 Git。
 
+本地 pgvector PostgreSQL：
+
+```powershell
+.\scripts\start-pgvector.ps1
+```
+
+脚本使用 `backend/.env` 的数据库账号、密码、库名和首选端口，数据保存在项目 `.local-data/pgvector-postgres/`。若首选端口被占用，脚本会自动选择 `5433-5450` 中的空闲端口，并写入被 Git 忽略的 `backend/.env.docker`；后端和 Alembic 会自动使用该端口。
+
 后端：
 
 ```powershell

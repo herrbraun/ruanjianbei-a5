@@ -4,6 +4,8 @@
 
 BEGIN;
 
+CREATE EXTENSION IF NOT EXISTS vector;
+
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(100) UNIQUE,
@@ -67,5 +69,132 @@ AND NOT EXISTS (
     FROM admin_profiles
     WHERE admin_profiles.user_id = users.id
 );
+
+CREATE TABLE IF NOT EXISTS scenic_areas (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(64) UNIQUE NOT NULL,
+    name VARCHAR(120) NOT NULL,
+    description TEXT,
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_bases (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(64) UNIQUE NOT NULL,
+    name VARCHAR(120) NOT NULL,
+    description TEXT,
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rag_profiles (
+    id SERIAL PRIMARY KEY,
+    scenic_area_id INTEGER NOT NULL REFERENCES scenic_areas(id) ON DELETE CASCADE,
+    name VARCHAR(120) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'archived')),
+    embedding_model VARCHAR(100) NOT NULL DEFAULT 'text-embedding-v4',
+    embedding_dimensions INTEGER NOT NULL DEFAULT 1024,
+    top_k INTEGER NOT NULL DEFAULT 5,
+    rerank_model VARCHAR(100),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_rag_profiles_scenic_area_id ON rag_profiles (scenic_area_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_rag_profiles_one_active_per_scenic
+    ON rag_profiles (scenic_area_id) WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS rag_profile_knowledge_bases (
+    id SERIAL PRIMARY KEY,
+    rag_profile_id INTEGER NOT NULL REFERENCES rag_profiles(id) ON DELETE CASCADE,
+    knowledge_base_id INTEGER NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    retrieval_priority INTEGER NOT NULL DEFAULT 0,
+    CONSTRAINT uq_rag_profile_knowledge_base UNIQUE (rag_profile_id, knowledge_base_id)
+);
+CREATE INDEX IF NOT EXISTS ix_rag_profile_knowledge_bases_profile ON rag_profile_knowledge_bases (rag_profile_id);
+CREATE INDEX IF NOT EXISTS ix_rag_profile_knowledge_bases_base ON rag_profile_knowledge_bases (knowledge_base_id);
+
+CREATE TABLE IF NOT EXISTS knowledge_documents (
+    id SERIAL PRIMARY KEY,
+    knowledge_base_id INTEGER NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+    original_filename VARCHAR(255) NOT NULL,
+    stored_filename VARCHAR(255) NOT NULL,
+    mime_type VARCHAR(120) NOT NULL,
+    content_hash VARCHAR(64) NOT NULL,
+    source_priority INTEGER NOT NULL DEFAULT 0,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'indexing', 'indexed', 'failed')),
+    error_message TEXT,
+    chunk_count INTEGER NOT NULL DEFAULT 0,
+    embedding_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    indexed_at TIMESTAMPTZ,
+    CONSTRAINT uq_knowledge_documents_base_hash UNIQUE (knowledge_base_id, content_hash)
+);
+CREATE INDEX IF NOT EXISTS ix_knowledge_documents_base_status ON knowledge_documents (knowledge_base_id, status);
+
+CREATE TABLE IF NOT EXISTS knowledge_chunks (
+    id SERIAL PRIMARY KEY,
+    document_id INTEGER NOT NULL REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+    knowledge_base_id INTEGER NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+    spot_id VARCHAR(100),
+    spot_name VARCHAR(160),
+    section VARCHAR(255),
+    ordinal INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    source_locator VARCHAR(255),
+    content_hash VARCHAR(64) NOT NULL,
+    CONSTRAINT uq_knowledge_chunks_document_ordinal UNIQUE (document_id, ordinal)
+);
+CREATE INDEX IF NOT EXISTS ix_knowledge_chunks_base_spot ON knowledge_chunks (knowledge_base_id, spot_id);
+CREATE INDEX IF NOT EXISTS ix_knowledge_chunks_document_id ON knowledge_chunks (document_id);
+CREATE INDEX IF NOT EXISTS ix_knowledge_chunks_knowledge_base_id ON knowledge_chunks (knowledge_base_id);
+
+CREATE TABLE IF NOT EXISTS knowledge_embeddings (
+    id SERIAL PRIMARY KEY,
+    chunk_id INTEGER UNIQUE NOT NULL REFERENCES knowledge_chunks(id) ON DELETE CASCADE,
+    embedding_model VARCHAR(100) NOT NULL DEFAULT 'text-embedding-v4',
+    dimensions INTEGER NOT NULL DEFAULT 1024,
+    embedding vector(1024) NOT NULL,
+    indexed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rag_query_logs (
+    id SERIAL PRIMARY KEY,
+    scenic_area_id INTEGER NOT NULL REFERENCES scenic_areas(id) ON DELETE CASCADE,
+    rag_profile_id INTEGER REFERENCES rag_profiles(id) ON DELETE SET NULL,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    query_text TEXT NOT NULL,
+    filters JSONB,
+    hits JSONB,
+    duration_ms INTEGER,
+    status VARCHAR(20) NOT NULL DEFAULT 'success',
+    error_message TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO scenic_areas (code, name, description)
+VALUES ('lingshan', '灵山胜境', '灵山胜境示范景区')
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO knowledge_bases (code, name, description)
+VALUES
+    ('lingshan-structured', '灵山结构化景点资料库', '景点基础信息、开放时间与演艺安排'),
+    ('lingshan-culture', '灵山历史文化资料库', '历史、文化和导览叙述资料')
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO rag_profiles (scenic_area_id, name, status)
+SELECT id, '灵山正式版 RAG', 'active' FROM scenic_areas WHERE code = 'lingshan'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO rag_profile_knowledge_bases (rag_profile_id, knowledge_base_id, retrieval_priority)
+SELECT profile.id, base.id, CASE WHEN base.code = 'lingshan-structured' THEN 100 ELSE 10 END
+FROM rag_profiles profile
+JOIN scenic_areas scenic ON scenic.id = profile.scenic_area_id
+JOIN knowledge_bases base ON base.code IN ('lingshan-structured', 'lingshan-culture')
+WHERE scenic.code = 'lingshan' AND profile.name = '灵山正式版 RAG'
+ON CONFLICT (rag_profile_id, knowledge_base_id) DO NOTHING;
 
 COMMIT;

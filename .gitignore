@@ -71,6 +71,7 @@ coverage/
 site/
 
 # Local database/runtime
+.local-data/
 *.sqlite
 *.sqlite3
 *.db
