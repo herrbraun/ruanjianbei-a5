@@ -19,8 +19,11 @@ def _admin_headers(client: TestClient) -> dict[str, str]:
 
 
 def _visitor_headers(client: TestClient) -> dict[str, str]:
-    response = client.post("/api/auth/visitor-login", json={"nickname": "avatar-visitor", "interest": "culture"})
-    assert response.status_code == 200
+    response = client.post(
+        "/api/auth/visitor-register",
+        json={"username": "avatar_visitor", "password": "password123"},
+    )
+    assert response.status_code == 201
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 

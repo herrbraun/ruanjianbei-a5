@@ -45,6 +45,7 @@ venv/
 env/
 ENV/
 backend/.python-packages/
+.python-packages/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/

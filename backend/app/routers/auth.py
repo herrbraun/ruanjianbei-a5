@@ -1,26 +1,66 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+import secrets
+import string
+from pathlib import Path
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.security import create_access_token, decode_access_token, verify_password
-from app.crud.user import add_login_log, create_visitor, get_user_by_id, get_user_by_username
+from app.crud.user import (
+    add_login_log,
+    create_visitor,
+    get_user_by_id,
+    get_user_by_username,
+    update_avatar,
+    update_password,
+    update_visitor_profile,
+)
 from app.database import get_db
+from app.models.spot import SpotTag
 from app.models.user import User
-from app.schemas.auth import AdminLoginRequest, AuthResponse, UserInfo, VisitorLoginRequest
+from app.schemas.auth import (
+    AdminLoginRequest,
+    AuthResponse,
+    InterestOptionsResponse,
+    PasswordChangeRequest,
+    ProfileUpdateRequest,
+    UserInfo,
+    UsernameAvailabilityResponse,
+    VisitorLoginRequest,
+    VisitorRegisterRequest,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 bearer_scheme = HTTPBearer(auto_error=False)
+avatar_directory = Path(__file__).resolve().parents[2] / "uploads" / "avatars"
+avatar_directory.mkdir(parents=True, exist_ok=True)
+username_suffix_alphabet = string.ascii_lowercase + string.digits
+
+
+def parse_interests(user: User) -> list[str]:
+    interest = user.visitor_profile.interest if user.visitor_profile else None
+    if not interest:
+        return []
+    return [item.strip() for item in interest.split(",") if item.strip()]
 
 
 def build_user_info(user: User) -> UserInfo:
+    interests = parse_interests(user)
     return UserInfo(
         id=user.id,
         role=user.role,
         username=user.username,
         nickname=user.nickname,
-        interest=user.visitor_profile.interest if user.visitor_profile else None,
+        avatar_url=user.avatar_url,
+        interest=",".join(interests) or None,
+        interests=interests,
+        needs_interest_setup=user.role == "visitor" and not interests,
     )
 
 
@@ -34,6 +74,23 @@ def get_client_ip(request: Request) -> str | None:
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
     return request.client.host if request.client else None
+
+
+def generate_username_suggestions(db: Session, username: str) -> list[str]:
+    base = username.strip()[:29]
+    suggestions: list[str] = []
+    for _ in range(60):
+        suffix = "".join(secrets.choice(username_suffix_alphabet) for _ in range(3))
+        candidate = f"{base}{suffix}"
+        if candidate not in suggestions and get_user_by_username(db, candidate) is None:
+            suggestions.append(candidate)
+        if len(suggestions) == 3:
+            break
+    return suggestions
+
+
+def list_interest_options(db: Session) -> list[str]:
+    return list(db.scalars(select(SpotTag.name).distinct().order_by(SpotTag.name)).all())
 
 
 def get_current_user(
@@ -59,15 +116,67 @@ def get_current_user(
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    """Restrict an endpoint to a persisted administrator account."""
     if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrator permission required")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
     return current_user
+
+
+def require_visitor(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != "visitor":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Visitor role required")
+    return current_user
+
+
+@router.get("/username-availability", response_model=UsernameAvailabilityResponse)
+def username_availability(
+    username: str = Query(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_]{3,32}$"),
+    db: Session = Depends(get_db),
+) -> UsernameAvailabilityResponse:
+    available = get_user_by_username(db, username) is None
+    return UsernameAvailabilityResponse(
+        available=available,
+        suggestions=[] if available else generate_username_suggestions(db, username),
+    )
+
+
+@router.post("/visitor-register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+def visitor_register(
+    payload: VisitorRegisterRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> AuthResponse:
+    if get_user_by_username(db, payload.username) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "username_taken",
+                "message": "账号名已被占用，请更改",
+                "suggestions": generate_username_suggestions(db, payload.username),
+            },
+        )
+    try:
+        user = create_visitor(db, payload.username, payload.password)
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "username_taken",
+                "message": "账号名已被占用，请更改",
+                "suggestions": generate_username_suggestions(db, payload.username),
+            },
+        ) from exc
+    add_login_log(db, user=user, ip_address=get_client_ip(request))
+    return issue_auth_response(user)
 
 
 @router.post("/visitor-login", response_model=AuthResponse)
 def visitor_login(payload: VisitorLoginRequest, request: Request, db: Session = Depends(get_db)) -> AuthResponse:
-    user = create_visitor(db, nickname=payload.nickname, interest=payload.interest)
+    user = get_user_by_username(db, payload.username)
+    if user is None or user.role != "visitor" or not user.password_hash:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
+    if not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
     add_login_log(db, user=user, ip_address=get_client_ip(request))
     return issue_auth_response(user)
 
@@ -85,6 +194,84 @@ def admin_login(payload: AdminLoginRequest, request: Request, db: Session = Depe
     return issue_auth_response(user)
 
 
+@router.get("/interests", response_model=InterestOptionsResponse)
+def read_interest_options(
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> InterestOptionsResponse:
+    return InterestOptionsResponse(interests=list_interest_options(db))
+
+
 @router.get("/me", response_model=UserInfo)
 def read_me(current_user: User = Depends(get_current_user)) -> UserInfo:
     return build_user_info(current_user)
+
+
+@router.patch("/me", response_model=UserInfo)
+def update_me(
+    payload: ProfileUpdateRequest,
+    current_user: User = Depends(require_visitor),
+    db: Session = Depends(get_db),
+) -> UserInfo:
+    if payload.interests is not None:
+        allowed_interests = set(list_interest_options(db))
+        invalid = [interest for interest in payload.interests if interest not in allowed_interests]
+        if invalid:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid interest selection")
+    user = update_visitor_profile(
+        db,
+        current_user,
+        nickname=payload.nickname,
+        interests=payload.interests,
+    )
+    return build_user_info(user)
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(
+    payload: PasswordChangeRequest,
+    current_user: User = Depends(require_visitor),
+    db: Session = Depends(get_db),
+) -> Response:
+    if not current_user.password_hash or not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+    if verify_password(payload.new_password, current_user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New password must be different")
+    update_password(db, current_user, payload.new_password)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def detect_image_extension(content: bytes) -> str | None:
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return ".png"
+    if content.startswith(b"\xff\xd8\xff"):
+        return ".jpg"
+    if len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return ".webp"
+    return None
+
+
+@router.post("/avatar", response_model=UserInfo)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_visitor),
+    db: Session = Depends(get_db),
+) -> UserInfo:
+    content = await file.read(5 * 1024 * 1024 + 1)
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="Avatar exceeds 5 MB")
+    extension = detect_image_extension(content)
+    if extension is None:
+        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Only PNG, JPEG and WebP are supported")
+
+    filename = f"user-{current_user.id}-{uuid4().hex}{extension}"
+    target = avatar_directory / filename
+    target.write_bytes(content)
+
+    previous_filename = Path(current_user.avatar_url).name if current_user.avatar_url else None
+    user = update_avatar(db, current_user, f"/uploads/avatars/{filename}")
+    if previous_filename and previous_filename != filename:
+        previous_path = avatar_directory / previous_filename
+        if previous_path.is_file():
+            previous_path.unlink()
+    return build_user_info(user)

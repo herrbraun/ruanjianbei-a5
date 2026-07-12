@@ -8,6 +8,7 @@ import { setUnauthorizedHandler } from './api/http'
 import router from './router'
 import { useAuthStore } from './stores/auth'
 import './styles.css'
+import './a-features.css'
 
 const app = createApp(App)
 const pinia = createPinia()

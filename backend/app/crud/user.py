@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.security import get_password_hash
@@ -12,14 +12,48 @@ def get_user_by_id(db: Session, user_id: int) -> User | None:
 
 
 def get_user_by_username(db: Session, username: str) -> User | None:
-    return db.scalar(select(User).where(User.username == username))
+    return db.scalar(select(User).where(func.lower(User.username) == username.strip().lower()))
 
 
-def create_visitor(db: Session, nickname: str, interest: str | None) -> User:
-    user = User(nickname=nickname, role="visitor")
+def create_visitor(db: Session, username: str, password: str) -> User:
+    normalized_username = username.strip()
+    user = User(
+        username=normalized_username,
+        password_hash=get_password_hash(password),
+        nickname=normalized_username,
+        role="visitor",
+    )
     db.add(user)
     db.flush()
-    db.add(VisitorProfile(user_id=user.id, interest=interest))
+    db.add(VisitorProfile(user_id=user.id, interest=None))
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def update_visitor_profile(
+    db: Session,
+    user: User,
+    *,
+    nickname: str | None = None,
+    interests: list[str] | None = None,
+) -> User:
+    if nickname is not None:
+        user.nickname = nickname
+    if interests is not None and user.visitor_profile:
+        user.visitor_profile.interest = ",".join(interests)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def update_password(db: Session, user: User, new_password: str) -> None:
+    user.password_hash = get_password_hash(new_password)
+    db.commit()
+
+
+def update_avatar(db: Session, user: User, avatar_url: str) -> User:
+    user.avatar_url = avatar_url
     db.commit()
     db.refresh(user)
     return user

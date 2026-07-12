@@ -255,10 +255,10 @@ onBeforeUnmount(stopDocumentPolling)
 </script>
 
 <template>
-  <AppLayout title="知识库与 RAG 配置" description="资料进入可复用知识库，再由每个景区的 RAG Profile 组合、生效与切换。" role-label="当前身份：管理员">
+  <AppLayout title="知识库" description="维护景区资料、检索范围和问答配置。" role-label="运营管理">
     <div v-loading="loading" class="knowledge-page">
       <section class="workspace-panel knowledge-toolbar">
-        <div><p class="eyebrow">SCENIC / PROFILE / KNOWLEDGE BASE</p><h2>{{ selectedArea?.name || '选择景区' }}</h2><p>游客始终使用该景区的正式 Profile；草稿 Profile 可在本页预览验证。</p></div>
+        <div><p class="eyebrow">景区知识配置</p><h2>{{ selectedArea?.name || '选择景区' }}</h2><p>设置游客问答使用的知识范围，并在启用前进行检索验证。</p></div>
         <div class="toolbar-actions"><el-button :icon="Plus" @click="showAreaDialog = true">新建景区</el-button><el-button :icon="Plus" @click="showBaseDialog = true">新建知识库</el-button><el-button type="primary" :icon="Plus" @click="showProfileDialog = true">新建 Profile</el-button></div>
       </section>
 

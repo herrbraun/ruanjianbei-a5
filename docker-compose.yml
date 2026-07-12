@@ -2,7 +2,7 @@ name: ai-tour-guide
 
 services:
   postgres:
-    image: pgvector/pgvector:pg18
+    image: pgvector/pgvector:0.8.4-pg18-bookworm
     container_name: ai-tour-guide-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
