@@ -31,7 +31,20 @@
 
 * { box-sizing: border-box; }
 html { min-width: 320px; background: var(--color-canvas); }
-body { margin: 0; min-width: 320px; min-height: 100vh; color: var(--color-text); background: var(--color-canvas); }
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  color: var(--color-text);
+  background-color: var(--color-canvas);
+  background-image:
+    linear-gradient(rgba(247, 247, 244, 0.88), rgba(247, 247, 244, 0.60)),
+    url('/images/lingshan-background.png');
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
 button, input, textarea, select { font: inherit; }
 a { color: inherit; }
 #app { min-height: 100vh; }
@@ -42,7 +55,7 @@ a { color: inherit; }
 
 .app-shell { min-height: 100dvh; }
 .app-sidebar { position: fixed; z-index: 30; inset: 0 auto 0 0; display: flex; width: var(--sidebar-width); flex-direction: column; padding: 24px 16px 16px; border-right: 1px solid var(--color-border); background: #f1f4f1; }
-.app-main { min-height: 100dvh; margin-left: var(--sidebar-width); }
+.app-main { min-height: 100dvh; margin-left: var(--sidebar-width); background: rgba(247, 247, 244, 0.18); }
 .brand-lockup { display: flex; align-items: center; gap: 12px; min-height: 48px; color: var(--color-text); text-decoration: none; }
 .brand-lockup > span:last-child { display: grid; gap: 2px; }
 .brand-lockup strong { font-family: var(--font-serif); font-size: 18px; }
@@ -120,11 +133,12 @@ a { color: inherit; }
 .spot-image-placeholder small { color: var(--color-muted); }
 .spot-type-tag { position: absolute; top: 12px; right: 12px; --el-tag-bg-color: rgba(23, 32, 29, .82); --el-tag-border-color: transparent; }
 .spot-card-body { padding: 18px; }
-.spot-id-line, .spot-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-muted); font-size: 12px; }
+.spot-id-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-muted); font-size: 12px; }
 .spot-card h2 { margin: 8px 0; font-family: var(--font-serif); font-size: 21px; }
 .spot-card p { display: -webkit-box; min-height: 52px; margin: 0 0 14px; overflow: hidden; color: var(--color-muted); line-height: 1.65; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.spot-card-footer { align-items: end; margin-top: 18px; }
+.spot-card-footer { display: grid; min-height: 44px; grid-template-columns: minmax(0, 1fr) max-content; align-items: center; gap: 12px; margin-top: 18px; color: var(--color-muted); font-size: 12px; }
 .spot-card-footer > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spot-card-footer .text-link { min-width: 68px; justify-content: flex-end; white-space: nowrap; }
 .skeleton-image { width: 100% !important; height: auto !important; aspect-ratio: 16 / 9; }
 .skeleton-body { display: grid; gap: 14px; padding: 18px; }
 .empty-panel, .detail-loading { min-height: 340px; padding: 32px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); }
@@ -223,7 +237,7 @@ a { color: inherit; }
 .text-link:hover { color: var(--color-primary); text-decoration: underline; text-underline-offset: 3px; }
 .record-comment { padding-left: 10px; border-left: 2px solid var(--color-gold); color: var(--color-muted); }
 
-.login-page { display: grid; min-height: 100dvh; grid-template-columns: minmax(0, 1fr) minmax(380px, 460px); gap: clamp(40px, 8vw, 120px); align-items: center; padding: clamp(32px, 6vw, 80px); background: var(--color-canvas); }
+.login-page { display: grid; min-height: 100dvh; grid-template-columns: minmax(0, 1fr) minmax(380px, 460px); gap: clamp(40px, 8vw, 120px); align-items: center; padding: clamp(32px, 6vw, 80px); background: transparent; }
 .login-intro { display: flex; min-height: 600px; flex-direction: column; justify-content: center; max-width: 700px; padding: 16px 0; }
 .login-brand { display: flex; align-items: center; gap: 12px; }
 .login-brand > span:last-child { display: grid; gap: 2px; }
@@ -318,6 +332,7 @@ a { color: inherit; }
 }
 
 @media (max-width: 767px) {
+  body { background-attachment: scroll; }
   .page-header { align-items: stretch; flex-direction: column; margin-bottom: 22px; }
   .page-actions, .page-actions > a, .page-actions .el-button { width: 100%; }
   .welcome-band { align-items: stretch; flex-direction: column; min-height: 0; padding: 24px; }

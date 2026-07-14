@@ -72,7 +72,7 @@ onMounted(loadSpots)
           <el-tag class="spot-type-tag" effect="dark" size="small">{{ typeLabel(spot.spot_type) }}</el-tag>
         </div>
         <div class="spot-card-body">
-          <div class="spot-id-line"><span>{{ spot.external_id || `#${spot.id}` }}</span><span>{{ spot.recommended_duration_minutes }} 分钟</span></div>
+          <div class="spot-id-line"><span>{{ spot.scenic_area }}</span><span>{{ spot.recommended_duration_minutes }} 分钟</span></div>
           <h2>{{ spot.name }}</h2><p>{{ spot.summary }}</p>
           <div class="tag-row"><el-tag v-for="tag in spot.tags.slice(0, 4)" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></div>
           <div class="spot-card-footer"><span>{{ spot.location || '位置待补充' }}</span><RouterLink class="text-link" :to="`/visitor/spots/${spot.id}`">查看详情</RouterLink></div>

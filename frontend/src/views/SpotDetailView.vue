@@ -46,7 +46,7 @@ onMounted(loadSpot)
       </section>
 
       <section class="detail-intro">
-        <div class="detail-kicker"><span>{{ spot.external_id || `#${spot.id}` }}</span><span>{{ spot.scenic_area }}</span></div>
+        <div class="detail-kicker"><span>{{ spot.scenic_area }}</span></div>
         <h2>{{ spot.name }}</h2><p class="detail-summary">{{ spot.summary }}</p>
         <div class="tag-row"><el-tag v-for="tag in spot.tags" :key="tag" effect="plain">{{ tag }}</el-tag></div>
         <dl class="info-list"><div><dt>位置</dt><dd>{{ spot.location || '暂无信息' }}</dd></div><div><dt>开放时间</dt><dd>{{ spot.opening_hours || '暂无信息' }}</dd></div><div><dt>建议游览</dt><dd>{{ spot.recommended_duration_minutes }} 分钟</dd></div><div><dt>类型</dt><dd>{{ spot.spot_type === 'attraction' ? '景点' : spot.spot_type === 'area' ? '展区' : '服务点' }}</dd></div></dl>
