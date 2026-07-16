@@ -22,6 +22,8 @@ Thumbs.db
 # Local agent instructions
 AGENTS.md
 agents.md
+/.superpowers/
+/.worktrees/
 
 # Frontend
 frontend/node_modules/
@@ -81,3 +83,7 @@ site/
 *.db
 *.tmp
 *.bak
+
+# Locally saved competition brief
+/A5-景区导览服务AI数字人 - A组赛题 - 软件杯大赛官网.html
+/A5-景区导览服务AI数字人 - A组赛题 - 软件杯大赛官网_files/
