@@ -29,6 +29,8 @@ const selectedAvatarId = ref<number>()
 const avatarListLoading = ref(false)
 const avatarRenderError = ref('')
 const audioLevel = ref(0)
+const avatarGesture = ref<'welcome' | 'guiding'>()
+const avatarWelcomeRequest = ref(0)
 
 let mediaRecorder: MediaRecorder | undefined
 let mediaStream: MediaStream | undefined
@@ -43,6 +45,7 @@ let audioAnalyser: AnalyserNode | undefined
 let audioSource: MediaElementAudioSourceNode | undefined
 let analysedAudio: HTMLAudioElement | undefined
 let audioAnimationFrame: number | undefined
+let avatarGestureTimer: ReturnType<typeof setTimeout> | undefined
 
 const selectedScenicArea = computed(() => scenicAreas.value.find((area) => area.code === selectedScenicCode.value))
 const messages = computed(() => guideStore.messages)
@@ -53,9 +56,11 @@ const avatarAsset = computed(() => (
     ? avatarAssetUrl(selectedScenicCode.value, activeAvatar.value.id)
     : null
 ))
-const avatarMotion = computed<'idle' | 'listening' | 'thinking' | 'speaking'>(() => {
+const avatarMotion = computed<'idle' | 'listening' | 'thinking' | 'speaking' | 'welcome' | 'guiding'>(() => {
   if (recording.value) return 'listening'
-  if (guideStore.sending || speechLoadingMessageId.value) return 'thinking'
+  if (guideStore.sending) return 'thinking'
+  if (avatarGesture.value) return avatarGesture.value
+  if (speechLoadingMessageId.value) return 'thinking'
   if (playingMessageId.value) return 'speaking'
   return 'idle'
 })
@@ -98,6 +103,25 @@ function avatarStorageKey(scenicCode: string) {
   return `ai-tour-guide:avatar:${scenicCode}`
 }
 
+function clearAvatarGesture() {
+  if (avatarGestureTimer) clearTimeout(avatarGestureTimer)
+  avatarGestureTimer = undefined
+  avatarGesture.value = undefined
+}
+
+function triggerAvatarGesture(gesture: 'welcome' | 'guiding', duration: number) {
+  clearAvatarGesture()
+  avatarGesture.value = gesture
+  avatarGestureTimer = setTimeout(() => {
+    avatarGesture.value = undefined
+    avatarGestureTimer = undefined
+  }, duration)
+}
+
+function requestAvatarWelcome() {
+  avatarWelcomeRequest.value += 1
+}
+
 async function loadScenicAvatars() {
   const scenicCode = selectedScenicCode.value
   scenicAvatars.value = []
@@ -127,6 +151,7 @@ function onAvatarSelectionChange(avatarId: number | string) {
   stopAudio()
   avatarRenderError.value = ''
   localStorage.setItem(avatarStorageKey(selectedScenicCode.value), String(avatar.id))
+  requestAvatarWelcome()
 }
 
 async function openGuideSession() {
@@ -145,13 +170,18 @@ async function startGuide() {
     ElMessage.warning('请先选择景区')
     return
   }
+  requestAvatarWelcome()
   guideStarted.value = true
   await Promise.all([openGuideSession(), loadScenicAvatars()])
-  if (!guideStore.activeSession) guideStarted.value = false
+  if (!guideStore.activeSession) {
+    guideStarted.value = false
+    return
+  }
 }
 
 function returnToScenicSelection() {
   stopAudio()
+  clearAvatarGesture()
   guideStarted.value = false
 }
 
@@ -260,6 +290,7 @@ function stopAudio() {
   playingMessageId.value = undefined
   speechLoadingMessageId.value = undefined
   activeAudioMessageId.value = undefined
+  clearAvatarGesture()
 }
 
 function stopAudioAnalysis() {
@@ -359,6 +390,7 @@ async function playMessage(message: GuideMessage) {
     }
     try {
       await audio.play()
+      triggerAvatarGesture('guiding', 1_800)
       void startAudioAnalysis(audio)
     } catch {
       playingMessageId.value = undefined
@@ -390,6 +422,7 @@ onBeforeUnmount(() => {
   if (mediaRecorder?.state === 'recording') mediaRecorder.stop()
   releaseMicrophone()
   stopAudio()
+  clearAvatarGesture()
 })
 </script>
 
@@ -440,14 +473,14 @@ onBeforeUnmount(() => {
             </div>
             <div class="guide-assistant-presence">
               <div class="guide-avatar-canvas guide-assistant-avatar" :class="`is-${avatarMotion}`">
-                <AvatarViewer :asset-url="avatarAsset" :state="avatarMotion" :audio-level="audioLevel" @error="onAvatarRenderError">
+                <AvatarViewer :asset-url="avatarAsset" :state="avatarMotion" :audio-level="audioLevel" :welcome-request="avatarWelcomeRequest" @error="onAvatarRenderError">
                   <div class="guide-avatar-fallback">
                     <span>{{ activeAvatar?.name?.slice(-1) || '灵' }}</span>
                     <strong>{{ activeAvatar?.name || '数字讲解员' }}</strong>
                     <small>文字与语音导览始终可用</small>
                   </div>
                 </AvatarViewer>
-                <span class="guide-avatar-state"><i />{{ avatarMotion === 'speaking' ? '正在讲解' : avatarMotion === 'thinking' ? '正在思考' : avatarMotion === 'listening' ? '正在聆听' : '随时为您服务' }}</span>
+                <span class="guide-avatar-state"><i />{{ avatarMotion === 'speaking' ? '正在讲解' : avatarMotion === 'thinking' ? '正在思考' : avatarMotion === 'guiding' ? '正在指引' : avatarMotion === 'welcome' ? '正在问候' : avatarMotion === 'listening' ? '正在聆听' : '随时为您服务' }}</span>
               </div>
               <div class="guide-welcome-bubble">
                 <span>{{ activeAvatar?.name || '景区讲解员' }}</span>

@@ -9,12 +9,22 @@ import {
   type VRMAnimation,
 } from '@pixiv/three-vrm-animation'
 
-const IDLE_ANIMATION_URL = '/animations/chatvrm-idle-loop.vrma'
+type AvatarState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'welcome' | 'guiding'
+type AnimatedState = Exclude<AvatarState, 'listening'>
+
+const ANIMATION_ASSETS: Record<AnimatedState, { url: string; loop: boolean }> = {
+  idle: { url: '/assets/animations/chatvrm-idle-loop.vrma', loop: true },
+  welcome: { url: '/assets/animations/mixamo/welcome-wave.vrma', loop: false },
+  guiding: { url: '/assets/animations/mixamo/guide-point.vrma', loop: false },
+  thinking: { url: '/assets/animations/mixamo/thinking.vrma', loop: true },
+  speaking: { url: '/assets/animations/mixamo/speaking.vrma', loop: true },
+}
 
 const props = defineProps<{
   assetUrl: string | null
-  state: 'idle' | 'listening' | 'thinking' | 'speaking'
+  state: AvatarState
   audioLevel: number
+  welcomeRequest: number
 }>()
 
 const emit = defineEmits<{ error: [message: string] }>()
@@ -28,12 +38,16 @@ let camera: THREE.PerspectiveCamera | undefined
 let currentVrm: VRM | undefined
 let headNode: THREE.Object3D | undefined
 let headRestQuaternion: THREE.Quaternion | undefined
-let idleMixer: THREE.AnimationMixer | undefined
-let idleAction: THREE.AnimationAction | undefined
+let animationMixer: THREE.AnimationMixer | undefined
+let animationActions: Partial<Record<AnimatedState, THREE.AnimationAction>> = {}
+let activeAnimatedState: AnimatedState | undefined
 let animationFrame: number | undefined
 let resizeObserver: ResizeObserver | undefined
 let activeLoadController: AbortController | undefined
-let idleLoadController: AbortController | undefined
+let animationLoadController: AbortController | undefined
+let welcomeTimer: ReturnType<typeof setTimeout> | undefined
+let transientAnimatedState: 'welcome' | undefined
+let lastWelcomeRequest = 0
 let loadVersion = 0
 let previousTime = 0
 let blinkUntil = 0
@@ -41,17 +55,22 @@ let nextBlinkAt = 0
 const headOffsetEuler = new THREE.Euler()
 const headOffsetQuaternion = new THREE.Quaternion()
 
-function disposeIdleAnimation() {
-  idleLoadController?.abort()
-  idleLoadController = undefined
-  idleMixer?.stopAllAction()
-  if (currentVrm) idleMixer?.uncacheRoot(currentVrm.scene)
-  idleMixer = undefined
-  idleAction = undefined
+function disposeAnimations() {
+  animationLoadController?.abort()
+  animationLoadController = undefined
+  if (welcomeTimer) clearTimeout(welcomeTimer)
+  welcomeTimer = undefined
+  transientAnimatedState = undefined
+  lastWelcomeRequest = 0
+  animationMixer?.stopAllAction()
+  if (currentVrm) animationMixer?.uncacheRoot(currentVrm.scene)
+  animationMixer = undefined
+  animationActions = {}
+  activeAnimatedState = undefined
 }
 
 function disposeVrm() {
-  disposeIdleAnimation()
+  disposeAnimations()
   if (!currentVrm || !scene) return
   scene.remove(currentVrm.scene)
   VRMUtils.deepDispose(currentVrm.scene)
@@ -70,48 +89,109 @@ function disposeParsedGltf(gltf: GLTF) {
 }
 
 function prepareGuidePose(vrm: VRM) {
-  // VRoid exports a neutral T-pose. Keep a calm arms-at-sides fallback while
-  // the optional VRMA file loads and in non-idle interaction states.
+  // A VRoid export starts in a T-pose. This remains the fallback only while
+  // animation resources are loading or a device cannot play VRMA files.
   vrm.humanoid?.getNormalizedBoneNode('leftUpperArm')?.rotateZ(-1.2)
   vrm.humanoid?.getNormalizedBoneNode('rightUpperArm')?.rotateZ(1.2)
   headNode = vrm.humanoid?.getNormalizedBoneNode('head') ?? undefined
   headRestQuaternion = headNode?.quaternion.clone()
 }
 
-async function loadIdleAnimation(vrm: VRM, version: number) {
-  const controller = new AbortController()
-  idleLoadController = controller
-  try {
-    const response = await fetch(IDLE_ANIMATION_URL, { signal: controller.signal })
-    if (!response.ok) throw new Error(`待机动作读取失败（${response.status}）`)
-    const buffer = await response.arrayBuffer()
-    const loader = new GLTFLoader()
-    loader.register((parser) => new VRMAnimationLoaderPlugin(parser))
-    const gltf = await new Promise<GLTF>((resolve, reject) => loader.parse(buffer, '', resolve, reject))
-    const animations = gltf.userData.vrmAnimations as VRMAnimation[] | undefined
-    const animation = animations?.[0]
-    if (!animation) throw new Error('待机动作文件中没有可用的 VRMA 动画')
-    if (controller.signal.aborted || version !== loadVersion || currentVrm !== vrm) return
+async function loadAnimation(
+  vrm: VRM,
+  version: number,
+  controller: AbortController,
+  state: AnimatedState,
+) {
+  const asset = ANIMATION_ASSETS[state]
+  const response = await fetch(asset.url, { signal: controller.signal })
+  if (!response.ok) throw new Error(`${state} 动作读取失败（${response.status}）`)
+  const buffer = await response.arrayBuffer()
+  const loader = new GLTFLoader()
+  loader.register((parser) => new VRMAnimationLoaderPlugin(parser))
+  const gltf = await new Promise<GLTF>((resolve, reject) => loader.parse(buffer, '', resolve, reject))
+  const animations = gltf.userData.vrmAnimations as VRMAnimation[] | undefined
+  const animation = animations?.[0]
+  if (!animation) throw new Error(`${state} 动作文件中没有可用的 VRMA 动画`)
+  if (controller.signal.aborted || version !== loadVersion || currentVrm !== vrm) return
 
-    // The lockfile currently resolves three-vrm one patch release ahead of
-    // three-vrm-animation. Their runtime VRM animation API is compatible,
-    // while TypeScript keeps their private core types nominally separate.
-    const clip = createVRMAnimationClip(
-      animation,
-      vrm as unknown as Parameters<typeof createVRMAnimationClip>[1],
+  // three-vrm and three-vrm-animation use nominal private types across
+  // separately resolved patch versions, while their runtime API is compatible.
+  const clip = createVRMAnimationClip(
+    animation,
+    vrm as unknown as Parameters<typeof createVRMAnimationClip>[1],
+  )
+  const action = animationMixer?.clipAction(clip)
+  if (!action) return
+  action.setLoop(asset.loop ? THREE.LoopRepeat : THREE.LoopOnce, asset.loop ? Infinity : 1)
+  action.clampWhenFinished = !asset.loop
+  action.enabled = true
+  action.paused = true
+  action.setEffectiveWeight(0)
+  action.play()
+  animationActions[state] = action
+}
+
+function applyAnimationState(state: AvatarState) {
+  const nextState = state === 'listening' ? undefined : state
+  if (activeAnimatedState === nextState) return
+  const previous = activeAnimatedState ? animationActions[activeAnimatedState] : undefined
+  const next = nextState ? animationActions[nextState] : undefined
+
+  if (next) {
+    next.reset()
+    next.paused = false
+    next.enabled = true
+    next.setEffectiveWeight(1)
+    if (previous && previous !== next) next.crossFadeFrom(previous, 0.2, false)
+    next.play()
+  } else if (previous) {
+    previous.fadeOut(0.16)
+  }
+  activeAnimatedState = next ? nextState : undefined
+}
+
+function activeAnimationState() {
+  return transientAnimatedState ?? props.state
+}
+
+function playWelcomeWhenReady() {
+  if (props.welcomeRequest <= lastWelcomeRequest || !animationActions.welcome) return
+  lastWelcomeRequest = props.welcomeRequest
+  if (welcomeTimer) clearTimeout(welcomeTimer)
+  transientAnimatedState = 'welcome'
+  applyAnimationState('welcome')
+  welcomeTimer = setTimeout(() => {
+    transientAnimatedState = undefined
+    welcomeTimer = undefined
+    applyAnimationState(props.state)
+  }, 1_500)
+}
+
+async function loadAnimations(vrm: VRM, version: number) {
+  const controller = new AbortController()
+  animationLoadController = controller
+  animationMixer = new THREE.AnimationMixer(vrm.scene)
+  try {
+    await Promise.all(
+      (Object.keys(ANIMATION_ASSETS) as AnimatedState[]).map(async (state) => {
+        try {
+          await loadAnimation(vrm, version, controller, state)
+        } catch (error) {
+          if (!controller.signal.aborted) console.warn(`数字人 ${state} 动作未加载，已使用基础动作`, error)
+        }
+      }),
     )
-    idleMixer = new THREE.AnimationMixer(vrm.scene)
-    idleAction = idleMixer.clipAction(clip)
-    idleAction.setLoop(THREE.LoopRepeat, Infinity)
-    idleAction.play()
+    if (!controller.signal.aborted && version === loadVersion && currentVrm === vrm) {
+      playWelcomeWhenReady()
+      applyAnimationState(activeAnimationState())
+    }
   } catch (error) {
     if (!controller.signal.aborted && version === loadVersion) {
-      // The viewer remains usable with its lightweight fallback motion when an
-      // optional action asset cannot be loaded.
-      console.warn('自然待机动作未加载，已使用基础待机：', error)
+      console.warn('数字人动作未加载，已使用基础待机', error)
     }
   } finally {
-    if (idleLoadController === controller) idleLoadController = undefined
+    if (animationLoadController === controller) animationLoadController = undefined
   }
 }
 
@@ -179,7 +259,7 @@ async function loadVrm() {
     prepareGuidePose(currentVrm)
     scene.add(currentVrm.scene)
     frameAvatar(currentVrm)
-    void loadIdleAnimation(currentVrm, version)
+    void loadAnimations(currentVrm, version)
   } catch (error) {
     if (controller.signal.aborted || version !== loadVersion) return
     renderFailed.value = true
@@ -192,7 +272,7 @@ async function loadVrm() {
 function updateAvatar(time: number) {
   if (!renderer || !scene || !camera) return
   const elapsed = time / 1000
-  const delta = previousTime ? (time - previousTime) / 1000 : 0
+  const delta = previousTime ? Math.min((time - previousTime) / 1000, 0.1) : 0
   previousTime = time
   if (currentVrm) {
     const manager = currentVrm.expressionManager
@@ -207,25 +287,16 @@ function updateAvatar(time: number) {
     if (blinkUntil && blinkUntil <= time) blinkUntil = 0
     manager?.setValue('blink', blinking)
 
-    const hasNaturalIdle = Boolean(idleMixer && idleAction)
-    if (idleMixer && idleAction) {
-      const isIdle = props.state === 'idle'
-      idleAction.paused = !isIdle
-      idleAction.setEffectiveWeight(isIdle ? 1 : 0)
-      idleMixer.update(delta)
-    }
-
-    const motion = props.state === 'idle'
-      ? { breath: 0.012, sway: 0.014, bodyTurn: 0.026, headTurn: 0.07, headTilt: 0.024 }
-      : props.state === 'listening'
-        ? { breath: 0.009, sway: 0.009, bodyTurn: 0.012, headTurn: 0.035, headTilt: 0.018 }
-        : props.state === 'thinking'
-          ? { breath: 0.007, sway: 0.018, bodyTurn: 0.016, headTurn: 0.05, headTilt: 0.032 }
-          : { breath: 0.009, sway: 0.007, bodyTurn: 0.009, headTurn: 0.02, headTilt: 0.014 }
+    applyAnimationState(activeAnimationState())
+    animationMixer?.update(delta)
+    const hasNaturalMotion = Boolean(activeAnimatedState && animationActions[activeAnimatedState])
+    const motion = props.state === 'listening'
+      ? { breath: 0.009, sway: 0.009, bodyTurn: 0.012, headTurn: 0.035, headTilt: 0.018 }
+      : { breath: 0.008, sway: 0.013, bodyTurn: 0.02, headTurn: 0.055, headTilt: 0.025 }
     const slowLook = Math.sin(elapsed * 0.43) + Math.sin(elapsed * 0.19) * 0.42
     const breath = Math.sin(elapsed * (isSpeaking ? 3.2 : 2.05)) * motion.breath
 
-    if (props.state === 'idle' && hasNaturalIdle) {
+    if (hasNaturalMotion) {
       currentVrm.scene.rotation.set(0, 0, 0)
       currentVrm.scene.position.set(0, 0, 0)
     } else {
@@ -233,7 +304,7 @@ function updateAvatar(time: number) {
       currentVrm.scene.rotation.z = Math.sin(elapsed * 0.86) * motion.sway
       currentVrm.scene.position.y = breath + (isSpeaking ? Math.sin(elapsed * 5.4) * 0.004 : 0)
     }
-    if ((!hasNaturalIdle || props.state !== 'idle') && headNode && headRestQuaternion) {
+    if (!hasNaturalMotion && headNode && headRestQuaternion) {
       headOffsetEuler.set(
         Math.sin(elapsed * 0.91) * motion.headTilt * 0.35,
         slowLook * motion.headTurn,
@@ -276,11 +347,13 @@ onMounted(() => {
 })
 
 watch(() => props.assetUrl, () => void loadVrm())
+watch(() => props.state, () => applyAnimationState(activeAnimationState()))
+watch(() => props.welcomeRequest, () => playWelcomeWhenReady())
 
 onBeforeUnmount(() => {
   loadVersion += 1
   cancelPendingLoad()
-  disposeIdleAnimation()
+  disposeAnimations()
   if (animationFrame) cancelAnimationFrame(animationFrame)
   resizeObserver?.disconnect()
   disposeVrm()

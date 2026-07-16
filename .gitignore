@@ -33,6 +33,7 @@ frontend/npm-cache/
 frontend/.turbo/
 frontend/coverage/
 frontend/.eslintcache
+frontend/public/animations/mixamo/
 *.tsbuildinfo
 
 # Python

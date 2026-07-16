@@ -38,9 +38,12 @@ def health_check() -> dict[str, str]:
 # same-origin. The route is absent until a frontend production build exists.
 frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 frontend_index = frontend_dist / "index.html"
+frontend_animations = frontend_dist / "animations"
 
 if frontend_index.is_file():
     app.mount("/assets", StaticFiles(directory=frontend_dist / "assets"), name="frontend-assets")
+    if frontend_animations.is_dir():
+        app.mount("/animations", StaticFiles(directory=frontend_animations), name="frontend-animations")
 
     @app.get("/{frontend_path:path}", include_in_schema=False)
     def serve_frontend(frontend_path: str) -> FileResponse:
