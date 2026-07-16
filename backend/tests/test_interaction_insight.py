@@ -21,6 +21,8 @@ def test_analyze_interaction_parses_fixed_structured_result() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         assert body["model"] == "qwen-plus-insight-test"
+        assert body["response_format"] == {"type": "json_object"}
+        assert "needs_attention" in body["messages"][0]["content"]
         assert "九龙灌浴几点开始" in body["messages"][1]["content"]
         return httpx.Response(200, json={"choices": [{"message": {"content": "```json\n{\"normalized_question\":\"九龙灌浴演出时间\",\"primary_topic\":\"演出活动\",\"topic_tags\":[\"演出活动\",\"开放时间\"],\"intent\":\"服务咨询\",\"sentiment\":\"neutral\",\"sentiment_score\":0,\"issue_type\":\"无明确问题\",\"needs_attention\":false}\n```"}}]})
 

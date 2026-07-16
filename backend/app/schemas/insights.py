@@ -40,6 +40,17 @@ class InsightReportCreate(BaseModel):
     period_start: date
     period_end: date
 
+    @model_validator(mode="after")
+    def validate_period(self) -> "InsightReportCreate":
+        duration = (self.period_end - self.period_start).days
+        if duration < 0:
+            raise ValueError("报告日期范围无效")
+        if self.period_type == "daily" and duration != 0:
+            raise ValueError("日报必须选择同一天")
+        if self.period_type == "weekly" and duration > 6:
+            raise ValueError("周报最多覆盖连续 7 天")
+        return self
+
 
 class InsightReportOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

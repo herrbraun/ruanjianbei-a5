@@ -53,7 +53,6 @@ class GuideMessageOut(BaseModel):
     answer_model: str | None
     answer_duration_ms: int | None
     status: str
-    error_message: str | None
     created_at: datetime
 
 

@@ -16,6 +16,7 @@ const router = createRouter({
     { path: '/admin', name: 'admin', component: () => import('@/views/AdminView.vue'), meta: { requiresAuth: true, role: 'admin' } },
     { path: '/admin/spots', name: 'admin-spots', component: () => import('@/views/AdminSpotView.vue'), meta: { requiresAuth: true, role: 'admin' } },
     { path: '/admin/analytics', name: 'admin-analytics', component: () => import('@/views/AdminAnalyticsView.vue'), meta: { requiresAuth: true, role: 'admin' } },
+    { path: '/admin/insights', name: 'admin-insights', component: () => import('@/views/AdminInsightsView.vue'), meta: { requiresAuth: true, role: 'admin' } },
     { path: '/admin/media', name: 'admin-media', component: () => import('@/views/AdminMediaView.vue'), meta: { requiresAuth: true, role: 'admin' } },
     { path: '/admin/routes', name: 'admin-routes', component: () => import('@/views/AdminRouteView.vue'), meta: { requiresAuth: true, role: 'admin' } },
     { path: '/admin/knowledge', name: 'admin-knowledge', component: () => import('@/views/KnowledgeView.vue'), meta: { requiresAuth: true, role: 'admin' } },

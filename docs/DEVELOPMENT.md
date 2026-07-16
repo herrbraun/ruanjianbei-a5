@@ -20,9 +20,9 @@ AVATAR_MAX_UPLOAD_BYTES=83886080
 
 游客端用 Three.js 与 `@pixiv/three-vrm` 渲染 VRM，并用 TTS 音频的 `AnalyserNode` 音量驱动 `aa` 嘴型；模型或 WebGL 不可用时会保留文字与语音讲解并显示静态卡片。
 
-## 第一阶段边界
+## 当前实现范围
 
-当前骨架只实现登录、鉴权、路由和数据库基础表。暂不实现 RAG、数字人、语音、知识库管理和大屏业务。
+当前已覆盖登录鉴权、景点与路线、RAG 知识库、文字/语音导览、数字人展示与配置、游客会话评价、互动感受度分析、管理数据大屏和日报/周报。互动分析由问答请求创建待处理记录，再由后台任务调用模型；管理端聚合查询只读取结构化结果，不在大屏请求中实时调用模型。
 
 ## 模型配置
 
@@ -41,6 +41,8 @@ RAG_VECTOR_BACKEND=pgvector
 RAG_JSON_CANDIDATE_LIMIT=2000
 ASR_MODEL=fun-asr
 TTS_MODEL=cosyvoice-v3.5-plus
+INSIGHT_ANALYSIS_MODEL=qwen-plus
+INSIGHT_REPORT_MODEL=qwen-plus
 ```
 
 真实 API Key 只写入 `backend/.env`，不要提交到 Git。

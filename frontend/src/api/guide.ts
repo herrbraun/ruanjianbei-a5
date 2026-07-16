@@ -35,7 +35,6 @@ export interface GuideMessage {
   answer_model: string | null
   answer_duration_ms: number | null
   status: 'success' | 'failed'
-  error_message: string | null
   created_at: string
 }
 
@@ -52,10 +51,15 @@ export interface AsrResult {
   duration_ms: number
 }
 
+export type GuideFeedbackTag = 'answer_accurate' | 'voice_natural' | 'avatar_preferred' | 'slow_response' | 'unresolved'
+export interface GuideFeedback { id: number; guide_session_id: number; rating: number; tags: GuideFeedbackTag[]; comment: string | null; created_at: string; updated_at: string }
+
 export const guideApi = {
   createSession: (scenicAreaCode: string) => http.post<GuideSession>('/guide/sessions', { scenic_area_code: scenicAreaCode }),
   listSessions: () => http.get<GuideSession[]>('/guide/sessions'),
   listMessages: (sessionId: number) => http.get<GuideMessage[]>(`/guide/sessions/${sessionId}/messages`),
+  getFeedback: (sessionId: number) => http.get<GuideFeedback | null>(`/guide/sessions/${sessionId}/feedback`),
+  saveFeedback: (sessionId: number, data: { rating: number; tags: GuideFeedbackTag[]; comment?: string }) => http.post<GuideFeedback>(`/guide/sessions/${sessionId}/feedback`, data),
   sendMessage: (sessionId: number, content: string, inputMode: 'text' | 'voice') =>
     http.post<GuideConversationResponse>(
       `/guide/sessions/${sessionId}/messages`,

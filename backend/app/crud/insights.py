@@ -46,13 +46,26 @@ def recover_stale_insights(db: Session, stale_before: datetime) -> int:
 
 def process_insight(insight_id: int) -> None:
     with SessionLocal() as db:
-        row = db.get(GuideMessageInsight, insight_id)
-        if row is None or row.analysis_status not in {"pending", "failed"}:
-            return
-        row.analysis_status = "processing"
-        row.analysis_attempts += 1
-        row.error_message = None
+        claim = db.execute(
+            update(GuideMessageInsight)
+            .where(
+                GuideMessageInsight.id == insight_id,
+                GuideMessageInsight.analysis_status.in_(("pending", "failed")),
+            )
+            .values(
+                analysis_status="processing",
+                analysis_attempts=GuideMessageInsight.analysis_attempts + 1,
+                error_message=None,
+                updated_at=func.now(),
+            )
+            .execution_options(synchronize_session=False)
+        )
         db.commit()
+        if claim.rowcount != 1:
+            return
+        row = db.get(GuideMessageInsight, insight_id)
+        if row is None:
+            return
         visitor = db.get(GuideMessage, row.visitor_message_id)
         assistant = db.get(GuideMessage, row.assistant_message_id) if row.assistant_message_id else None
         try:
@@ -73,10 +86,16 @@ def process_insight(insight_id: int) -> None:
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 
-def _period_bounds(start_date: date, end_date: date) -> tuple[datetime, datetime]:
+def period_bounds(start_date: date, end_date: date) -> tuple[datetime, datetime]:
     start = datetime.combine(start_date, time.min, SHANGHAI).astimezone(timezone.utc)
     end = datetime.combine(end_date + timedelta(days=1), time.min, SHANGHAI).astimezone(timezone.utc)
     return start, end
+
+
+def _local_day(db: Session, column):
+    if db.get_bind().dialect.name == "postgresql":
+        return func.date(func.timezone("Asia/Shanghai", column))
+    return func.date(column)
 
 
 def _ratio(value: int, total: int) -> float:
@@ -110,11 +129,11 @@ def _dashboard_metrics(db: Session, scenic_area_id: int, start: datetime, end: d
 
 
 def get_guide_dashboard(db: Session, scenic_area_id: int, start_date: date, end_date: date) -> dict:
-    start, end = _period_bounds(start_date, end_date)
+    start, end = period_bounds(start_date, end_date)
     days = (end_date - start_date).days + 1
     previous_end_date = start_date - timedelta(days=1)
     previous_start_date = previous_end_date - timedelta(days=days - 1)
-    previous_start, previous_end = _period_bounds(previous_start_date, previous_end_date)
+    previous_start, previous_end = period_bounds(previous_start_date, previous_end_date)
     insight_filter = (GuideMessageInsight.scenic_area_id == scenic_area_id, GuideMessageInsight.created_at >= start, GuideMessageInsight.created_at < end, GuideMessageInsight.analysis_status == "completed")
 
     popular = db.execute(
@@ -136,19 +155,22 @@ def get_guide_dashboard(db: Session, scenic_area_id: int, start_date: date, end_
             GuideMessageInsight.resolution_status == "unresolved",
         ).order_by(GuideMessageInsight.created_at.desc()).limit(8)
     ).all()
+    session_day = _local_day(db, GuideSession.created_at)
+    insight_day = _local_day(db, GuideMessageInsight.created_at)
+    feedback_day = _local_day(db, GuideFeedback.created_at)
     service_rows = db.execute(
-        select(func.date(GuideSession.created_at), func.count(GuideSession.id), func.count(distinct(GuideSession.user_id)))
+        select(session_day, func.count(GuideSession.id), func.count(distinct(GuideSession.user_id)))
         .where(GuideSession.scenic_area_id == scenic_area_id, GuideSession.created_at >= start, GuideSession.created_at < end)
-        .group_by(func.date(GuideSession.created_at)).order_by(func.date(GuideSession.created_at))
+        .group_by(session_day).order_by(session_day)
     ).all()
     sentiment_rows = db.execute(
-        select(func.date(GuideMessageInsight.created_at), GuideMessageInsight.sentiment, func.count(GuideMessageInsight.id))
-        .where(*insight_filter).group_by(func.date(GuideMessageInsight.created_at), GuideMessageInsight.sentiment)
+        select(insight_day, GuideMessageInsight.sentiment, func.count(GuideMessageInsight.id))
+        .where(*insight_filter).group_by(insight_day, GuideMessageInsight.sentiment)
     ).all()
     rating_rows = db.execute(
-        select(func.date(GuideFeedback.created_at), func.avg(GuideFeedback.rating), func.count(GuideFeedback.id))
+        select(feedback_day, func.avg(GuideFeedback.rating), func.count(GuideFeedback.id))
         .where(GuideFeedback.scenic_area_id == scenic_area_id, GuideFeedback.created_at >= start, GuideFeedback.created_at < end)
-        .group_by(func.date(GuideFeedback.created_at)).order_by(func.date(GuideFeedback.created_at))
+        .group_by(feedback_day).order_by(feedback_day)
     ).all()
     sentiment_by_day: dict[str, dict[str, int | str]] = {}
     for day, sentiment, count in sentiment_rows:

@@ -44,7 +44,9 @@ def analyze_interaction(
     own_client = client is None
     active = client or httpx.Client(timeout=60.0)
     system = (
-        "你是景区游客交互分析器，只输出一个 JSON 对象。"
+        "你是景区游客交互分析器，只输出一个 JSON 对象，禁止增加、遗漏或改名字段。"
+        "必须严格包含这8个字段：normalized_question、primary_topic、topic_tags、intent、sentiment、sentiment_score、issue_type、needs_attention。"
+        "示例结构：{\"normalized_question\":\"简短问题\",\"primary_topic\":\"历史文化\",\"topic_tags\":[\"历史文化\"],\"intent\":\"知识咨询\",\"sentiment\":\"neutral\",\"sentiment_score\":0,\"issue_type\":\"无明确问题\",\"needs_attention\":false}。"
         f"主题只能从{list(TOPICS)}选择；意图只能从{list(INTENTS)}选择；问题类型只能从{list(ISSUE_TYPES)}选择。"
         "sentiment 只能为 positive、neutral、negative，sentiment_score 范围为 -1 到 1。"
         "normalized_question 不超过30个中文字符，不含游客身份；primary_topic 必须包含在 topic_tags 中。"
@@ -55,7 +57,7 @@ def analyze_interaction(
             response = active.post(
                 f"{settings.llm_base_url.rstrip('/')}/chat/completions",
                 headers={"Authorization": f"Bearer {settings.dashscope_api_key}", "Content-Type": "application/json"},
-                json={"model": settings.insight_analysis_model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}], "temperature": 0.1, "stream": False},
+                json={"model": settings.insight_analysis_model, "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}], "temperature": 0.1, "stream": False, "response_format": {"type": "json_object"}},
             )
             if response.is_error:
                 raise InteractionInsightError(f"洞察模型调用失败（HTTP {response.status_code}）")

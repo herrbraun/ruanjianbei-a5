@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import httpx
 from pydantic import ValidationError
+from sqlalchemy import update
 
 from app.config import settings
 from app.database import SessionLocal
@@ -17,33 +18,50 @@ class InsightReportError(RuntimeError):
     pass
 
 
+def _parse_report(payload: dict) -> ReportNarrative:
+    try:
+        raw = payload["choices"][0]["message"]["content"]
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.IGNORECASE)
+        return ReportNarrative.model_validate(json.loads(cleaned))
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError, ValidationError) as exc:
+        raise InsightReportError("报告模型返回格式无效") from exc
+
+
 def generate_insight_report(snapshot: dict, *, client: httpx.Client | None = None) -> ReportNarrative:
     if not settings.dashscope_api_key or settings.dashscope_api_key == "your_dashscope_api_key":
         raise InsightReportError("未配置 DASHSCOPE_API_KEY，无法生成感受度报告")
     own = client is None
     active = client or httpx.Client(timeout=60.0)
     try:
-        response = active.post(
-            f"{settings.llm_base_url.rstrip('/')}/chat/completions",
-            headers={"Authorization": f"Bearer {settings.dashscope_api_key}", "Content-Type": "application/json"},
-            json={
-                "model": settings.insight_report_model,
-                "messages": [
-                    {"role": "system", "content": "你是景区运营分析师。只能依据聚合指标输出纯JSON，不得改写数字。字段为summary、attention_points(恰好3条)、risk_findings、recommendations(3至5条)。"},
-                    {"role": "user", "content": json.dumps(snapshot, ensure_ascii=False)},
-                ],
-                "temperature": 0.2,
-                "stream": False,
-            },
+        system = (
+            "你是景区运营分析师，只能依据聚合指标输出纯JSON，不得改写数字，禁止遗漏或改名字段。"
+            "必须包含summary字符串、attention_points恰好3条、risk_findings至少1条、recommendations 3至5条。"
+            "示例结构：{\"summary\":\"总体结论\",\"attention_points\":[\"重点1\",\"重点2\",\"重点3\"],"
+            "\"risk_findings\":[\"风险1\"],\"recommendations\":[\"建议1\",\"建议2\",\"建议3\"]}。"
         )
-        if response.is_error:
-            raise InsightReportError(f"报告模型调用失败（HTTP {response.status_code}）")
-        try:
-            raw = response.json()["choices"][0]["message"]["content"]
-            cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.IGNORECASE)
-            return ReportNarrative.model_validate(json.loads(cleaned))
-        except (KeyError, IndexError, TypeError, json.JSONDecodeError, ValidationError) as exc:
-            raise InsightReportError("报告模型返回格式无效") from exc
+        user = json.dumps(snapshot, ensure_ascii=False)
+        for attempt in range(2):
+            response = active.post(
+                f"{settings.llm_base_url.rstrip('/')}/chat/completions",
+                headers={"Authorization": f"Bearer {settings.dashscope_api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": settings.insight_report_model,
+                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                    "temperature": 0.2,
+                    "stream": False,
+                    "response_format": {"type": "json_object"},
+                },
+            )
+            if response.is_error:
+                raise InsightReportError(f"报告模型调用失败（HTTP {response.status_code}）")
+            try:
+                return _parse_report(response.json())
+            except InsightReportError:
+                if attempt:
+                    raise
+                raw = response.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                user = f"请严格按既定四个字段修复下面的JSON，补齐列表数量，只输出JSON：\n{raw}"
+        raise InsightReportError("报告模型没有返回有效结果")
     except httpx.HTTPError as exc:
         raise InsightReportError("报告模型连接失败") from exc
     finally:
@@ -53,12 +71,21 @@ def generate_insight_report(snapshot: dict, *, client: httpx.Client | None = Non
 
 def process_report(report_id: int) -> None:
     with SessionLocal() as db:
-        report = db.get(ScenicInsightReport, report_id)
-        if report is None or report.generation_status not in {"pending", "failed"}:
-            return
-        report.generation_status = "processing"
-        report.error_message = None
+        claim = db.execute(
+            update(ScenicInsightReport)
+            .where(
+                ScenicInsightReport.id == report_id,
+                ScenicInsightReport.generation_status.in_(("pending", "failed")),
+            )
+            .values(generation_status="processing", error_message=None)
+            .execution_options(synchronize_session=False)
+        )
         db.commit()
+        if claim.rowcount != 1:
+            return
+        report = db.get(ScenicInsightReport, report_id)
+        if report is None:
+            return
         try:
             narrative = generate_insight_report(report.metrics_snapshot)
             report.summary = narrative.summary

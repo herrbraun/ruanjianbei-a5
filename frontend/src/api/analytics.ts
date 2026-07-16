@@ -35,6 +35,23 @@ export interface SpotAnalytics {
   }>
 }
 
+export interface GuideDashboardMetrics {
+  service_visitors: number; session_count: number; question_count: number; answer_success_rate: number
+  average_answer_duration_ms: number | null; average_rating: number | null; negative_rate: number
+  analysis_coverage_rate: number; analysis_failed_count: number
+}
+export interface GuideDashboard {
+  period: { start_date: string; end_date: string }
+  metrics: GuideDashboardMetrics
+  previous_period: GuideDashboardMetrics
+  service_trend: Array<{ date: string; sessions: number; visitors: number }>
+  sentiment_trend: Array<{ date: string; positive: number; neutral: number; negative: number }>
+  satisfaction_trend: Array<{ date: string; average_rating: number; count: number }>
+  topic_distribution: Array<{ name: string; count: number }>
+  popular_questions: Array<{ name: string; count: number }>
+  attention_preview: Array<{ id: number; normalized_question: string | null; issue_type: string | null; sentiment: string | null; created_at: string }>
+}
+
 export function getAnalyticsOverview() {
   return http.get<AnalyticsOverview>('/admin/analytics/overview')
 }
@@ -45,4 +62,8 @@ export function getRouteAnalytics() {
 
 export function getSpotAnalytics() {
   return http.get<SpotAnalytics>('/admin/analytics/spots')
+}
+
+export function getGuideDashboard(scenicAreaId: number, startDate: string, endDate: string) {
+  return http.get<GuideDashboard>('/admin/analytics/guide', { params: { scenic_area_id: scenicAreaId, start_date: startDate, end_date: endDate } })
 }

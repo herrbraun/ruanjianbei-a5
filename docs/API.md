@@ -169,3 +169,23 @@ Authorization: Bearer <jwt-token>
 - `POST /api/guide/messages/{message_id}/speech`：为当前游客自己的 AI 回答生成并返回音频流。
 
 导览接口仅对游客 JWT 开放。每次提问均解析所选景区当时的正式 RAG Profile，并在回答记录中保存 Profile 与来源快照。
+
+## 游客评价与感受度分析
+
+游客接口：
+
+- `GET /api/guide/sessions/{session_id}/feedback`：读取当前游客自己的会话评价；未评价时返回 `204`。
+- `POST /api/guide/sessions/{session_id}/feedback`：新增或更新评价，请求包含 `rating`（1–5）、`tags` 和可选 `comment`。
+
+可用标签为 `answer_accurate`、`voice_natural`、`avatar_preferred`、`slow_response`、`unresolved`。内部模型错误不会通过游客消息接口返回。
+
+管理员接口：
+
+- `GET /api/admin/analytics/guide?scenic_area_id={id}&start_date=YYYY-MM-DD&end_date=YYYY-MM-DD`：读取指定景区的核心指标、上期对比、服务/情绪/满意度趋势、主题、热门问题和待关注预览。
+- `GET /api/admin/insights/messages`：按景区、情绪、问题类型、分析状态、关注状态和解决状态分页筛选互动洞察。
+- `POST /api/admin/insights/messages/{id}/retry`、`POST /api/admin/insights/messages/retry-failed`：重试单条或批量失败分析。
+- `PATCH /api/admin/insights/messages/{id}/resolve`：标记事项已解决或重新打开。
+- `POST /api/admin/insight-reports`：按景区、日报/周报和日期范围创建异步报告。
+- `GET /api/admin/insight-reports`、`GET /api/admin/insight-reports/{id}`：查询报告列表和生成结果。
+
+互动分析和报告均使用独立模型配置。互动分析失败不会影响游客问答；应用启动时会把异常中断的处理中任务恢复到待处理状态。

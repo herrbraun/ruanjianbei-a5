@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from unittest.mock import Mock
+from types import SimpleNamespace
+from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
@@ -9,6 +11,7 @@ from app.database import get_db
 from app.models.guide import GuideMessageInsight, GuideSession
 from app.models.knowledge import RagProfile, ScenicArea
 from app.services.guide_answer import GuideGeneratedAnswer
+from app.schemas.guide import GuideMessageOut
 
 
 def visitor_headers(client: TestClient) -> dict[str, str]:
@@ -53,7 +56,6 @@ def test_chat_creates_pending_insight_and_schedules_analysis(client: TestClient,
         db.add(session); db.commit(); session_id = session.id
     finally:
         generator.close()
-
     process = Mock()
     monkeypatch.setattr("app.routers.guide.search_profile", lambda *args, **kwargs: {"hits": []})
     monkeypatch.setattr("app.routers.guide.generate_guide_answer", lambda **kwargs: GuideGeneratedAnswer(content="测试回答", model="test", duration_ms=5))
@@ -70,3 +72,15 @@ def test_chat_creates_pending_insight_and_schedules_analysis(client: TestClient,
         assert row.visitor_message_id == response.json()["visitor_message"]["id"]
     finally:
         generator.close()
+
+
+def test_visitor_message_schema_hides_internal_model_error() -> None:
+    message = SimpleNamespace(
+        id=1, session_id=1, role="assistant", input_mode=None, content="回答暂时不可用",
+        rag_profile_id=None, sources=None, answer_model=None, answer_duration_ms=None,
+        status="failed", error_message="provider secret diagnostic", created_at=datetime.now(timezone.utc),
+    )
+
+    payload = GuideMessageOut.model_validate(message).model_dump()
+
+    assert "error_message" not in payload

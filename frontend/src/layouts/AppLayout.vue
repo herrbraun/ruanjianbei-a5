@@ -57,6 +57,7 @@ const navigation = computed<NavigationItem[]>(() => {
       { label: '知识库', to: '/admin/knowledge', icon: Collection },
       { label: '数字人管理', to: '/admin/avatars', icon: UserFilled },
       { label: '运营统计', to: '/admin/analytics', icon: DataAnalysis },
+      { label: '游客洞察', to: '/admin/insights', icon: ChatDotRound },
     ]
   }
   return [

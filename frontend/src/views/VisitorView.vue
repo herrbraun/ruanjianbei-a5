@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { Compass, Document, Loading, Microphone, Position, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import AvatarViewer from '@/components/AvatarViewer.vue'
 import { avatarApi, avatarAssetUrl, type ScenicAvatar } from '@/api/avatar'
-import { guideApi, type GuideMessage, type GuideSource } from '@/api/guide'
+import { guideApi, type GuideFeedbackTag, type GuideMessage, type GuideSource } from '@/api/guide'
 import { knowledgeApi, type ScenicArea } from '@/api/knowledge'
 import AppLayout from '@/layouts/AppLayout.vue'
 import { useGuideStore } from '@/stores/guide'
@@ -31,6 +31,17 @@ const avatarRenderError = ref('')
 const audioLevel = ref(0)
 const avatarGesture = ref<'welcome' | 'guiding'>()
 const avatarWelcomeRequest = ref(0)
+const feedbackLoading = ref(false)
+const feedbackSaving = ref(false)
+const feedbackSubmitted = ref(false)
+const feedbackForm = reactive({ rating: 5, tags: [] as GuideFeedbackTag[], comment: '' })
+const feedbackTagOptions: Array<{ value: GuideFeedbackTag; label: string }> = [
+  { value: 'answer_accurate', label: '回答准确' },
+  { value: 'voice_natural', label: '语音自然' },
+  { value: 'avatar_preferred', label: '形象喜欢' },
+  { value: 'slow_response', label: '响应较慢' },
+  { value: 'unresolved', label: '问题未解决' },
+]
 
 let mediaRecorder: MediaRecorder | undefined
 let mediaStream: MediaStream | undefined
@@ -49,6 +60,7 @@ let avatarGestureTimer: ReturnType<typeof setTimeout> | undefined
 
 const selectedScenicArea = computed(() => scenicAreas.value.find((area) => area.code === selectedScenicCode.value))
 const messages = computed(() => guideStore.messages)
+const hasAssistantAnswer = computed(() => messages.value.some((message) => message.role === 'assistant' && message.status === 'success'))
 const sessionReady = computed(() => guideStarted.value && Boolean(guideStore.activeSession && !guideStore.loadingMessages))
 const activeAvatar = computed(() => scenicAvatars.value.find((avatar) => avatar.id === selectedAvatarId.value))
 const avatarAsset = computed(() => (
@@ -414,7 +426,54 @@ function onAvatarRenderError(message: string) {
   avatarRenderError.value = `${message}，已切换为静态展示，不影响文字与语音讲解。`
 }
 
+function resetFeedback() {
+  feedbackForm.rating = 5
+  feedbackForm.tags = []
+  feedbackForm.comment = ''
+  feedbackSubmitted.value = false
+}
+
+async function loadFeedback() {
+  const sessionId = guideStore.activeSession?.id
+  resetFeedback()
+  if (!sessionId) return
+  feedbackLoading.value = true
+  try {
+    const { data } = await guideApi.getFeedback(sessionId)
+    if (data && typeof data === 'object') {
+      feedbackForm.rating = data.rating
+      feedbackForm.tags = [...data.tags]
+      feedbackForm.comment = data.comment || ''
+      feedbackSubmitted.value = true
+    }
+  } catch (error) {
+    ElMessage.error(errorText(error, '体验评价加载失败'))
+  } finally {
+    feedbackLoading.value = false
+  }
+}
+
+async function saveFeedback() {
+  const sessionId = guideStore.activeSession?.id
+  if (!sessionId) return
+  feedbackSaving.value = true
+  try {
+    await guideApi.saveFeedback(sessionId, {
+      rating: feedbackForm.rating,
+      tags: feedbackForm.tags,
+      comment: feedbackForm.comment.trim() || undefined,
+    })
+    feedbackSubmitted.value = true
+    ElMessage.success('感谢反馈，我们会继续改进导览体验')
+  } catch (error) {
+    ElMessage.error(errorText(error, '体验评价保存失败'))
+  } finally {
+    feedbackSaving.value = false
+  }
+}
+
 watch(messages, () => void scrollToLatest(), { deep: true })
+watch(() => guideStore.activeSession?.id, () => void loadFeedback())
 
 onMounted(() => void loadScenicAreas())
 onBeforeUnmount(() => {
@@ -523,6 +582,21 @@ onBeforeUnmount(() => {
             </div>
           </article>
         </div>
+
+        <details v-if="hasAssistantAnswer" class="guide-feedback-card">
+          <summary>{{ feedbackSubmitted ? '已提交体验评价' : '本次导览体验如何？' }}</summary>
+          <div v-loading="feedbackLoading" class="guide-feedback-form">
+            <div class="guide-feedback-rating">
+              <span>整体满意度</span>
+              <el-rate v-model="feedbackForm.rating" show-text :texts="['很不满意', '不满意', '一般', '满意', '非常满意']" />
+            </div>
+            <el-checkbox-group v-model="feedbackForm.tags" class="guide-feedback-tags">
+              <el-checkbox-button v-for="option in feedbackTagOptions" :key="option.value" :value="option.value">{{ option.label }}</el-checkbox-button>
+            </el-checkbox-group>
+            <el-input v-model="feedbackForm.comment" type="textarea" :rows="2" maxlength="1000" show-word-limit placeholder="还可以告诉我们哪里做得好，或哪里需要改进（选填）" />
+            <el-button type="primary" :loading="feedbackSaving" @click="saveFeedback">{{ feedbackSubmitted ? '更新评价' : '提交评价' }}</el-button>
+          </div>
+        </details>
 
         <footer class="guide-composer">
           <div class="guide-composer-mode" :class="{ voice: draftInputMode === 'voice' }">

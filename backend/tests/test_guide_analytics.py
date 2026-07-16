@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.crud.insights import get_guide_dashboard
-from app.database import Base
+from app.database import Base, get_db
 from app.models.guide import GuideFeedback, GuideMessage, GuideMessageInsight, GuideSession
 from app.models.knowledge import ScenicArea
 from app.models.user import User
@@ -83,3 +84,48 @@ def test_dashboard_endpoint_requires_admin_and_valid_period(client: TestClient) 
     visitor = client.post("/api/auth/visitor-register", json={"username": "dashboardvisitor", "password": "password123"})
     visitor_headers = {"Authorization": f"Bearer {visitor.json()['access_token']}"}
     assert client.get(f"/api/admin/analytics/guide?scenic_area_id={scenic.json()['id']}&start_date=2026-07-01&end_date=2026-07-07", headers=visitor_headers).status_code == 403
+
+
+def test_insight_message_endpoint_enforces_scenic_and_date_filters(client: TestClient) -> None:
+    login = client.post("/api/auth/admin-login", json={"username": "admin", "password": "123456"})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    override = client.app.dependency_overrides[get_db]
+    generator = override()
+    db = next(generator)
+    now = datetime.now(timezone.utc)
+    try:
+        visitor = User(username="risk-filter-user", role="visitor", nickname="筛选游客")
+        first = ScenicArea(code="risk-first", name="风险景区一", is_enabled=True)
+        second = ScenicArea(code="risk-second", name="风险景区二", is_enabled=True)
+        db.add_all([visitor, first, second]); db.flush()
+        for index, scenic in enumerate((first, second)):
+            session = GuideSession(user_id=visitor.id, scenic_area_id=scenic.id, created_at=now)
+            db.add(session); db.flush()
+            question = GuideMessage(session_id=session.id, role="user", content=f"问题{index}", status="success", created_at=now)
+            db.add(question); db.flush()
+            db.add(GuideMessageInsight(
+                scenic_area_id=scenic.id, guide_session_id=session.id, visitor_message_id=question.id,
+                analysis_status="completed", normalized_question=f"摘要{index}", primary_topic="服务体验",
+                topic_tags=["服务体验"], intent="投诉反馈", sentiment="negative", sentiment_score=-0.8,
+                issue_type="响应速度", needs_attention=True, created_at=now,
+            ))
+        db.commit()
+        first_id = first.id
+    finally:
+        generator.close()
+
+    day = now.astimezone(ZoneInfo("Asia/Shanghai")).date().isoformat()
+    response = client.get(
+        f"/api/admin/insights/messages?scenic_area_id={first_id}&start_date={day}&end_date={day}&sentiment=negative",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert response.json()["items"][0]["normalized_question"] == "摘要0"
+
+    invalid = client.get(
+        f"/api/admin/insights/messages?scenic_area_id={first_id}&start_date={day}&end_date={day}&sentiment=unknown",
+        headers=headers,
+    )
+    assert invalid.status_code == 422

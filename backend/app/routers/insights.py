@@ -6,13 +6,13 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.crud.insights import get_guide_dashboard, process_insight
+from app.crud.insights import get_guide_dashboard, period_bounds, process_insight
 from app.crud.knowledge import get_scenic_area_by_id
 from app.database import get_db
 from app.models.guide import GuideMessage, GuideMessageInsight, ScenicInsightReport
 from app.models.user import User
 from app.routers.auth import require_admin
-from app.schemas.insights import InsightReportCreate, InsightReportOut, InsightResolve
+from app.schemas.insights import ISSUE_TYPES, InsightReportCreate, InsightReportOut, InsightResolve
 from app.services.insight_report import process_report
 
 router = APIRouter(prefix="/admin", tags=["admin-insights"])
@@ -20,13 +20,27 @@ router = APIRouter(prefix="/admin", tags=["admin-insights"])
 
 @router.get("/insights/messages")
 def list_insight_messages(
-    scenic_area_id: int | None = Query(default=None, gt=0), sentiment: str | None = None,
+    scenic_area_id: int = Query(gt=0), sentiment: str | None = None,
     issue_type: str | None = None, analysis_status: str | None = None,
     needs_attention: bool | None = None, resolution_status: str | None = None,
+    start_date: date = Query(), end_date: date = Query(),
     page: int = Query(default=1, ge=1), page_size: int = Query(default=20, ge=1, le=100),
     _: User = Depends(require_admin), db: Session = Depends(get_db),
 ) -> dict:
-    filters = []
+    if get_scenic_area_by_id(db, scenic_area_id) is None:
+        raise HTTPException(status_code=404, detail="景区不存在")
+    if start_date > end_date or (end_date - start_date).days > 365:
+        raise HTTPException(status_code=422, detail="日期范围无效或超过 366 天")
+    if sentiment is not None and sentiment not in {"positive", "neutral", "negative"}:
+        raise HTTPException(status_code=422, detail="情绪筛选值无效")
+    if issue_type is not None and issue_type not in ISSUE_TYPES:
+        raise HTTPException(status_code=422, detail="问题类型筛选值无效")
+    if analysis_status is not None and analysis_status not in {"pending", "processing", "completed", "failed"}:
+        raise HTTPException(status_code=422, detail="分析状态筛选值无效")
+    if resolution_status is not None and resolution_status not in {"unresolved", "resolved"}:
+        raise HTTPException(status_code=422, detail="处理状态筛选值无效")
+    start, end = period_bounds(start_date, end_date)
+    filters = [GuideMessageInsight.created_at >= start, GuideMessageInsight.created_at < end]
     for column, value in ((GuideMessageInsight.scenic_area_id, scenic_area_id), (GuideMessageInsight.sentiment, sentiment), (GuideMessageInsight.issue_type, issue_type), (GuideMessageInsight.analysis_status, analysis_status), (GuideMessageInsight.needs_attention, needs_attention), (GuideMessageInsight.resolution_status, resolution_status)):
         if value is not None: filters.append(column == value)
     total = db.scalar(select(func.count(GuideMessageInsight.id)).where(*filters)) or 0
@@ -57,9 +71,9 @@ def retry_insight(insight_id: int, background_tasks: BackgroundTasks, _: User = 
 
 
 @router.post("/insights/messages/retry-failed", status_code=status.HTTP_202_ACCEPTED)
-def retry_failed_insights(background_tasks: BackgroundTasks, scenic_area_id: int | None = Query(default=None, gt=0), _: User = Depends(require_admin), db: Session = Depends(get_db)) -> dict:
+def retry_failed_insights(background_tasks: BackgroundTasks, scenic_area_id: int = Query(gt=0), _: User = Depends(require_admin), db: Session = Depends(get_db)) -> dict:
     stmt = select(GuideMessageInsight).where(GuideMessageInsight.analysis_status == "failed")
-    if scenic_area_id is not None: stmt = stmt.where(GuideMessageInsight.scenic_area_id == scenic_area_id)
+    stmt = stmt.where(GuideMessageInsight.scenic_area_id == scenic_area_id)
     rows = list(db.scalars(stmt.limit(100)))
     for row in rows: row.analysis_status = "pending"; row.error_message = None
     db.commit()
@@ -91,9 +105,8 @@ def create_insight_report(payload: InsightReportCreate, background_tasks: Backgr
 
 
 @router.get("/insight-reports", response_model=list[InsightReportOut])
-def list_insight_reports(scenic_area_id: int | None = Query(default=None, gt=0), _: User = Depends(require_admin), db: Session = Depends(get_db)) -> list[ScenicInsightReport]:
-    stmt = select(ScenicInsightReport).order_by(ScenicInsightReport.created_at.desc())
-    if scenic_area_id is not None: stmt = stmt.where(ScenicInsightReport.scenic_area_id == scenic_area_id)
+def list_insight_reports(scenic_area_id: int = Query(gt=0), _: User = Depends(require_admin), db: Session = Depends(get_db)) -> list[ScenicInsightReport]:
+    stmt = select(ScenicInsightReport).where(ScenicInsightReport.scenic_area_id == scenic_area_id).order_by(ScenicInsightReport.created_at.desc())
     return list(db.scalars(stmt))
 
 
