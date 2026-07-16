@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.guide import GuideMessage, GuideSession
+from app.models.guide import GuideFeedback, GuideMessage, GuideSession
 from app.models.knowledge import ScenicArea
 
 
@@ -91,3 +91,36 @@ def get_user_assistant_message(db: Session, message_id: int, user_id: int) -> Gu
         .where(GuideMessage.id == message_id, GuideMessage.role == "assistant", GuideSession.user_id == user_id)
     )
     return db.scalar(statement)
+
+
+def get_guide_feedback(db: Session, session_id: int) -> GuideFeedback | None:
+    return db.scalar(select(GuideFeedback).where(GuideFeedback.guide_session_id == session_id))
+
+
+def upsert_guide_feedback(
+    db: Session,
+    session: GuideSession,
+    user_id: int,
+    *,
+    rating: int,
+    tags: list[str],
+    comment: str | None,
+) -> GuideFeedback:
+    feedback = get_guide_feedback(db, session.id)
+    if feedback is None:
+        feedback = GuideFeedback(
+            guide_session_id=session.id,
+            user_id=user_id,
+            scenic_area_id=session.scenic_area_id,
+            rating=rating,
+            tags=tags,
+            comment=comment,
+        )
+        db.add(feedback)
+    else:
+        feedback.rating = rating
+        feedback.tags = tags
+        feedback.comment = comment
+    db.commit()
+    db.refresh(feedback)
+    return feedback

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -67,3 +68,23 @@ class AsrResponse(BaseModel):
     transcript: str
     model: str
     duration_ms: int
+
+
+FeedbackTag = Literal["answer_accurate", "voice_natural", "avatar_preferred", "slow_response", "unresolved"]
+
+
+class GuideFeedbackUpsert(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    tags: list[FeedbackTag] = Field(default_factory=list, max_length=5)
+    comment: str | None = Field(default=None, max_length=1000)
+
+
+class GuideFeedbackOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    guide_session_id: int
+    rating: int
+    tags: list[str]
+    comment: str | None
+    created_at: datetime
+    updated_at: datetime

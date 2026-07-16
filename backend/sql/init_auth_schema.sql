@@ -254,6 +254,53 @@ CREATE INDEX IF NOT EXISTS ix_guide_messages_session_id ON guide_messages (sessi
 CREATE INDEX IF NOT EXISTS ix_guide_messages_rag_profile_id ON guide_messages (rag_profile_id);
 CREATE INDEX IF NOT EXISTS ix_guide_messages_session_created ON guide_messages (session_id, created_at);
 
+CREATE TABLE IF NOT EXISTS guide_message_insights (
+    id SERIAL PRIMARY KEY,
+    scenic_area_id INTEGER NOT NULL REFERENCES scenic_areas(id) ON DELETE CASCADE,
+    guide_session_id INTEGER NOT NULL REFERENCES guide_sessions(id) ON DELETE CASCADE,
+    visitor_message_id INTEGER NOT NULL UNIQUE REFERENCES guide_messages(id) ON DELETE CASCADE,
+    assistant_message_id INTEGER REFERENCES guide_messages(id) ON DELETE SET NULL,
+    normalized_question VARCHAR(120), primary_topic VARCHAR(50), topic_tags JSON,
+    intent VARCHAR(50), sentiment VARCHAR(20), sentiment_score DOUBLE PRECISION,
+    issue_type VARCHAR(50), needs_attention BOOLEAN NOT NULL DEFAULT FALSE,
+    resolution_status VARCHAR(20) NOT NULL DEFAULT 'unresolved', resolved_at TIMESTAMPTZ,
+    resolved_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    analysis_status VARCHAR(20) NOT NULL DEFAULT 'pending', analysis_model VARCHAR(100),
+    analysis_attempts INTEGER NOT NULL DEFAULT 0, error_message TEXT, analyzed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (analysis_status IN ('pending','processing','completed','failed')),
+    CHECK (sentiment IS NULL OR sentiment IN ('positive','neutral','negative')),
+    CHECK (sentiment_score IS NULL OR sentiment_score BETWEEN -1 AND 1),
+    CHECK (resolution_status IN ('unresolved','resolved'))
+);
+CREATE INDEX IF NOT EXISTS ix_guide_insights_scenic_created ON guide_message_insights (scenic_area_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_guide_insights_scenic_sentiment_created ON guide_message_insights (scenic_area_id, sentiment, created_at);
+CREATE INDEX IF NOT EXISTS ix_guide_insights_status_updated ON guide_message_insights (analysis_status, updated_at);
+CREATE INDEX IF NOT EXISTS ix_guide_insights_attention_resolution_created ON guide_message_insights (needs_attention, resolution_status, created_at);
+
+CREATE TABLE IF NOT EXISTS guide_feedbacks (
+    id SERIAL PRIMARY KEY,
+    guide_session_id INTEGER NOT NULL UNIQUE REFERENCES guide_sessions(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    scenic_area_id INTEGER NOT NULL REFERENCES scenic_areas(id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5), tags JSON NOT NULL DEFAULT '[]', comment TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_guide_feedbacks_scenic_created ON guide_feedbacks (scenic_area_id, created_at);
+
+CREATE TABLE IF NOT EXISTS scenic_insight_reports (
+    id SERIAL PRIMARY KEY,
+    scenic_area_id INTEGER NOT NULL REFERENCES scenic_areas(id) ON DELETE CASCADE,
+    period_type VARCHAR(20) NOT NULL CHECK (period_type IN ('daily','weekly')),
+    period_start DATE NOT NULL, period_end DATE NOT NULL, metrics_snapshot JSON NOT NULL,
+    summary TEXT, attention_points JSON, risk_findings JSON, recommendations JSON,
+    generation_status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (generation_status IN ('pending','processing','completed','failed')),
+    generation_model VARCHAR(100), error_message TEXT,
+    created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    generated_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_scenic_insight_reports_scenic_period ON scenic_insight_reports (scenic_area_id, period_start, period_end);
+
 INSERT INTO scenic_areas (code, name, description)
 VALUES ('lingshan', '灵山胜境', '灵山胜境示范景区')
 ON CONFLICT (code) DO NOTHING;

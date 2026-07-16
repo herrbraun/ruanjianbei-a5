@@ -10,16 +10,18 @@ from app.config import settings
 from app.crud.guide import (
     create_guide_message,
     create_guide_session,
+    get_guide_feedback,
     get_user_assistant_message,
     get_user_guide_session,
     list_guide_messages,
     list_user_guide_sessions,
     touch_guide_session,
+    upsert_guide_feedback,
 )
 from app.crud.avatar import default_scenic_avatar_config, get_scenic_avatar_config
 from app.crud.knowledge import get_active_profile, get_scenic_area_by_code, get_scenic_area_by_id
 from app.database import get_db
-from app.models.guide import GuideMessage, GuideSession
+from app.models.guide import GuideFeedback, GuideMessage, GuideSession
 from app.models.user import User
 from app.routers.auth import get_current_user
 from app.schemas.guide import (
@@ -29,6 +31,8 @@ from app.schemas.guide import (
     GuideMessageOut,
     GuideSessionCreate,
     GuideSessionOut,
+    GuideFeedbackOut,
+    GuideFeedbackUpsert,
 )
 from app.services.guide_answer import GuideAnswerError, generate_guide_answer
 from app.services.retrieval import RetrievalError, search_profile
@@ -99,6 +103,39 @@ def read_session_messages(
 ) -> list[GuideMessage]:
     _session_or_404(db, session_id, current_user.id)
     return list_guide_messages(db, session_id)
+
+
+@router.get("/sessions/{session_id}/feedback", response_model=GuideFeedbackOut)
+def read_session_feedback(
+    session_id: int,
+    current_user: User = Depends(require_visitor),
+    db: Session = Depends(get_db),
+) -> GuideFeedback | Response:
+    _session_or_404(db, session_id, current_user.id)
+    feedback = get_guide_feedback(db, session_id)
+    return feedback if feedback is not None else Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/sessions/{session_id}/feedback", response_model=GuideFeedbackOut)
+def submit_session_feedback(
+    session_id: int,
+    payload: GuideFeedbackUpsert,
+    current_user: User = Depends(require_visitor),
+    db: Session = Depends(get_db),
+) -> GuideFeedback:
+    session = _session_or_404(db, session_id, current_user.id)
+    has_answer = any(message.role == "assistant" for message in list_guide_messages(db, session.id))
+    if not has_answer:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="请先完成至少一次导览问答再评价")
+    comment = payload.comment.strip() if payload.comment and payload.comment.strip() else None
+    return upsert_guide_feedback(
+        db,
+        session,
+        current_user.id,
+        rating=payload.rating,
+        tags=list(payload.tags),
+        comment=comment,
+    )
 
 
 @router.post("/sessions/{session_id}/messages", response_model=GuideConversationResponse)
