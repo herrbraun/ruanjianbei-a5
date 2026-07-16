@@ -5,23 +5,23 @@ from fastapi.testclient import TestClient
 from app.core.security import create_access_token
 
 
-def test_visitor_login_returns_a_valid_session(client: TestClient) -> None:
+def test_visitor_registration_returns_a_valid_session(client: TestClient) -> None:
     login_response = client.post(
-        "/api/auth/visitor-login",
-        json={"nickname": "游客001", "interest": "历史文化"},
+        "/api/auth/visitor-register",
+        json={"username": "visitor001", "password": "password123"},
     )
 
-    assert login_response.status_code == 200
+    assert login_response.status_code == 201
     payload = login_response.json()
     assert payload["token_type"] == "bearer"
     assert isinstance(payload["user"]["id"], int)
-    assert payload["user"] == {
-        "id": payload["user"]["id"],
-        "role": "visitor",
-        "username": None,
-        "nickname": "游客001",
-        "interest": "历史文化",
-    }
+    assert payload["user"]["id"] >= 1
+    assert payload["user"]["role"] == "visitor"
+    assert payload["user"]["username"] == "visitor001"
+    assert payload["user"]["nickname"] == "visitor001"
+    assert payload["user"]["interest"] is None
+    assert payload["user"]["interests"] == []
+    assert payload["user"]["needs_interest_setup"] is True
 
     me_response = client.get(
         "/api/auth/me",

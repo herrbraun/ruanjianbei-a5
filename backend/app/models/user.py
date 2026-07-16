@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -10,12 +10,16 @@ from app.database import Base
 
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = (CheckConstraint("role IN ('visitor', 'admin')", name="ck_users_role"),)
+    __table_args__ = (
+        CheckConstraint("role IN ('visitor', 'admin')", name="ck_users_role"),
+        UniqueConstraint("username", name="users_username_key"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    username: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
+    username: Mapped[str | None] = mapped_column(String(100), index=True, nullable=True)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     nickname: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -36,7 +40,10 @@ class User(Base):
         uselist=False,
     )
     login_logs: Mapped[list["LoginLog"]] = relationship(back_populates="user")
-    guide_sessions: Mapped[list["GuideSession"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    guide_sessions: Mapped[list["GuideSession"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class VisitorProfile(Base):
@@ -71,3 +78,11 @@ class LoginLog(Base):
     ip_address: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     user: Mapped[User | None] = relationship(back_populates="login_logs")
+
+
+Index(
+    "uq_users_username_lower",
+    func.lower(User.username),
+    unique=True,
+    postgresql_where=User.username.is_not(None),
+)

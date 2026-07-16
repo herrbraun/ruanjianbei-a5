@@ -11,6 +11,16 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from app.config import settings  # noqa: E402
 from app.database import Base  # noqa: E402
+from app.models.spot import (  # noqa: F401,E402
+    RouteFeedback,
+    RoutePlan,
+    RouteRecommendationSetting,
+    RouteSpot,
+    ScenicSpot,
+    SpotMediaAsset,
+    SpotTag,
+    VisitorBehaviorRecord,
+)
 from app.models.user import AdminProfile, LoginLog, User, VisitorProfile  # noqa: F401,E402
 from app.models.knowledge import (  # noqa: F401,E402
     KnowledgeBase, KnowledgeChunk, KnowledgeDocument, KnowledgeEmbedding,

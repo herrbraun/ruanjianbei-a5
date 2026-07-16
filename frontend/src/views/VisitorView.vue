@@ -427,10 +427,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AppLayout title="智能导览会话" role-label="当前身份：游客">
+  <AppLayout title="智能导览" description="选择景区，与数字讲解员开始对话。" role-label="游览服务">
     <section class="guide-page" v-loading="loadingAreas">
       <article v-if="!guideStarted" class="guide-launch-card">
-        <p class="eyebrow">SCENIC CONTEXT</p>
+        <p class="eyebrow">选择景区</p>
         <h2>先选一座景区</h2>
         <p>从景区文化、路线安排到演出时间，让讲解员陪你慢慢逛。</p>
         <el-select v-model="selectedScenicCode" class="guide-area-select" placeholder="请选择景区" :disabled="loadingAreas">
@@ -469,7 +469,7 @@ onBeforeUnmount(() => {
                   <el-option v-for="avatar in scenicAvatars" :key="avatar.id" :label="`${avatar.name} · ${avatar.outfit_name}`" :value="avatar.id" />
                 </el-select>
               </div>
-              <span v-else-if="!avatarListLoading" class="guide-avatar-empty">当前景区尚未上架数字人，仍可使用文字与语音导览。</span>
+              <span v-else-if="!avatarListLoading" class="guide-avatar-empty">当前可使用文字与语音导览。</span>
             </div>
             <div class="guide-assistant-presence">
               <div class="guide-avatar-canvas guide-assistant-avatar" :class="`is-${avatarMotion}`">

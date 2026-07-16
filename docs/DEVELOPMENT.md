@@ -107,3 +107,23 @@ cd frontend
 npm.cmd run dev
 npm.cmd run build
 ```
+
+## 景点与路线数据
+
+开发者 B 模块包含景点、标签、景点素材、路线方案、路线景点、路线反馈、推荐设置和游客行为记录。新数据库执行 `alembic upgrade head` 即可创建完整结构；真实资料通过以下脚本导入：
+
+```powershell
+cd backend
+python scripts\import_scenic_package.py
+python scripts\import_spot_images.py
+```
+
+导入脚本按景点名称关联素材，无法匹配的文件不会写入数据库。前端和后端验证命令：
+
+```powershell
+cd backend
+python -m compileall app
+
+cd ..\frontend
+npm.cmd run build
+```

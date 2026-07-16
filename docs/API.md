@@ -18,7 +18,18 @@
 
 后端默认地址：`http://localhost:8000/api`
 
-## 游客登录
+## 游客注册与登录
+
+`POST /auth/visitor-register`
+
+首次注册提交账号和密码，成功后直接返回 JWT 和用户信息；账号占用时返回 `409`，`detail.suggestions` 提供三个可选账号。
+
+```json
+{
+  "username": "visitor001",
+  "password": "password123"
+}
+```
 
 `POST /auth/visitor-login`
 
@@ -26,8 +37,8 @@
 
 ```json
 {
-  "nickname": "游客001",
-  "interest": "历史文化"
+  "username": "visitor001",
+  "password": "password123"
 }
 ```
 
@@ -40,9 +51,12 @@
   "user": {
     "id": 2,
     "role": "visitor",
-    "nickname": "游客001",
-    "username": null,
-    "interest": "历史文化"
+    "nickname": "visitor001",
+    "username": "visitor001",
+    "avatar_url": null,
+    "interest": null,
+    "interests": [],
+    "needs_interest_setup": true
   }
 }
 ```
@@ -87,6 +101,31 @@ Authorization: Bearer <jwt-token>
 ```
 
 返回当前登录用户信息。
+
+账号相关接口：
+
+- `GET /auth/username-availability?username={账号}`：检查账号并返回可选账号。
+- `GET /auth/interests`：读取可选兴趣标签。
+- `PATCH /auth/me`：修改昵称和兴趣标签。
+- `POST /auth/change-password`：验证原密码并修改密码。
+- `POST /auth/avatar`：上传 PNG、JPEG 或 WebP 头像，最大 5 MB。
+
+## 景点与路线
+
+游客接口均要求游客 Bearer Token：
+
+- `GET /spots`、`GET /spots/{id}`：查询启用景点及详情。
+- `POST /routes/recommend`：按兴趣、时长、起点和偏好生成并保存路线。
+- `GET /routes/{id}`：读取当前游客自己的路线。
+- `POST /routes/{id}/feedback`：提交 1 至 5 分评价和反馈内容。
+
+管理接口均要求管理员 Bearer Token：
+
+- `GET|POST /admin/spots`、`PUT /admin/spots/{id}`：查询、新增和编辑景点。
+- `PATCH /admin/spots/{id}/status`：启用或停用景点。
+- `/admin/spots/{id}/media`：维护景点图片、视频和音频。
+- `/admin/routes/settings`、`GET /admin/routes`：维护推荐设置并查看路线记录。
+- `GET /admin/analytics/overview`：读取登录、景点、路线、反馈和游客行为统计。
 
 ## RAG 知识库管理
 

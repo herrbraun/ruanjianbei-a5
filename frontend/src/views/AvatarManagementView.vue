@@ -213,7 +213,7 @@ onMounted(() => void loadData())
 </script>
 
 <template>
-  <AppLayout title="数字人形象管理" description="以人物身份统筹外观、服装和声音，为每个景区控制可用讲解员。" role-label="当前身份：管理员">
+  <AppLayout title="数字人管理" description="维护讲解员形象、声音和景区启用配置。" role-label="运营管理">
     <section v-loading="loading" class="avatar-management-page">
       <header class="avatar-management-hero">
         <div>
@@ -269,7 +269,7 @@ onMounted(() => void loadData())
             </div>
           </article>
         </div>
-        <el-empty v-else description="当前景区尚未上架数字人外观"><el-button type="primary" @click="openVariantDialog">上传第一套 VRM</el-button></el-empty>
+        <el-empty v-else description="当前景区暂无数字人形象"><el-button type="primary" @click="openVariantDialog">添加形象</el-button></el-empty>
       </section>
 
       <section class="avatar-people-section">

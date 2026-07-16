@@ -9,12 +9,15 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(100) UNIQUE,
     password_hash VARCHAR(255),
     nickname VARCHAR(100),
+    avatar_url VARCHAR(500),
     role VARCHAR(20) NOT NULL CHECK (role IN ('visitor', 'admin')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS ix_users_id ON users (id);
+CREATE INDEX IF NOT EXISTS ix_users_username ON users (username);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_users_username_lower ON users (LOWER(username)) WHERE username IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS visitor_profiles (
     id SERIAL PRIMARY KEY,
@@ -272,5 +275,139 @@ JOIN scenic_areas scenic ON scenic.id = profile.scenic_area_id
 JOIN knowledge_bases base ON base.code IN ('lingshan-structured', 'lingshan-culture')
 WHERE scenic.code = 'lingshan' AND profile.name = '灵山正式版 RAG'
 ON CONFLICT (rag_profile_id, knowledge_base_id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS scenic_spots (
+    id SERIAL PRIMARY KEY,
+    external_id VARCHAR(30),
+    scenic_area VARCHAR(120) NOT NULL DEFAULT '灵山胜境',
+    spot_type VARCHAR(20) NOT NULL DEFAULT 'attraction' CHECK (spot_type IN ('attraction', 'area', 'service')),
+    name VARCHAR(120) NOT NULL,
+    summary VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    location VARCHAR(500),
+    opening_hours VARCHAR(1000),
+    landscape_parameters TEXT,
+    cultural_context TEXT,
+    highlights TEXT,
+    notes TEXT,
+    source_name VARCHAR(255),
+    recommended_duration_minutes INTEGER NOT NULL DEFAULT 30,
+    priority INTEGER NOT NULL DEFAULT 0,
+    status VARCHAR(20) NOT NULL DEFAULT 'enabled' CHECK (status IN ('enabled', 'disabled')),
+    cover_image_url VARCHAR(1000),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_scenic_spots_external_id UNIQUE (external_id)
+);
+CREATE INDEX IF NOT EXISTS ix_scenic_spots_id ON scenic_spots (id);
+CREATE INDEX IF NOT EXISTS ix_scenic_spots_external_id ON scenic_spots (external_id);
+CREATE INDEX IF NOT EXISTS ix_scenic_spots_scenic_area ON scenic_spots (scenic_area);
+CREATE INDEX IF NOT EXISTS ix_scenic_spots_spot_type ON scenic_spots (spot_type);
+CREATE INDEX IF NOT EXISTS ix_scenic_spots_name ON scenic_spots (name);
+
+CREATE TABLE IF NOT EXISTS spot_tags (
+    id SERIAL PRIMARY KEY,
+    spot_id INTEGER NOT NULL REFERENCES scenic_spots(id) ON DELETE CASCADE,
+    name VARCHAR(50) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_spot_tags_spot_name UNIQUE (spot_id, name)
+);
+CREATE INDEX IF NOT EXISTS ix_spot_tags_id ON spot_tags (id);
+CREATE INDEX IF NOT EXISTS ix_spot_tags_spot_id ON spot_tags (spot_id);
+CREATE INDEX IF NOT EXISTS ix_spot_tags_name ON spot_tags (name);
+
+CREATE TABLE IF NOT EXISTS spot_media_assets (
+    id SERIAL PRIMARY KEY,
+    spot_id INTEGER NOT NULL REFERENCES scenic_spots(id) ON DELETE CASCADE,
+    media_type VARCHAR(20) NOT NULL CHECK (media_type IN ('image', 'video', 'audio')),
+    url VARCHAR(1000) NOT NULL,
+    description VARCHAR(255),
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    status VARCHAR(20) NOT NULL DEFAULT 'enabled' CHECK (status IN ('enabled', 'disabled')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_spot_media_spot_url UNIQUE (spot_id, url)
+);
+CREATE INDEX IF NOT EXISTS ix_spot_media_assets_id ON spot_media_assets (id);
+CREATE INDEX IF NOT EXISTS ix_spot_media_assets_spot_id ON spot_media_assets (spot_id);
+
+CREATE TABLE IF NOT EXISTS route_recommendation_settings (
+    id SERIAL PRIMARY KEY,
+    tag_match_weight INTEGER NOT NULL DEFAULT 100 CHECK (tag_match_weight BETWEEN 0 AND 1000),
+    priority_weight NUMERIC(6, 2) NOT NULL DEFAULT 1 CHECK (priority_weight BETWEEN 0 AND 100),
+    max_spots INTEGER NOT NULL DEFAULT 12 CHECK (max_spots BETWEEN 1 AND 30),
+    include_service_points BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS route_plans (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    start_spot_id INTEGER REFERENCES scenic_spots(id) ON DELETE SET NULL,
+    interest VARCHAR(100) NOT NULL,
+    preference VARCHAR(20) NOT NULL DEFAULT 'balanced' CHECK (preference IN ('balanced', 'priority', 'more_spots')),
+    duration_minutes INTEGER NOT NULL,
+    total_duration_minutes INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_route_plans_id ON route_plans (id);
+CREATE INDEX IF NOT EXISTS ix_route_plans_user_id ON route_plans (user_id);
+CREATE INDEX IF NOT EXISTS ix_route_plans_start_spot_id ON route_plans (start_spot_id);
+
+CREATE TABLE IF NOT EXISTS route_spots (
+    id SERIAL PRIMARY KEY,
+    route_plan_id INTEGER NOT NULL REFERENCES route_plans(id) ON DELETE CASCADE,
+    spot_id INTEGER REFERENCES scenic_spots(id) ON DELETE SET NULL,
+    sequence INTEGER NOT NULL,
+    stay_minutes INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    CONSTRAINT uq_route_spots_plan_sequence UNIQUE (route_plan_id, sequence)
+);
+CREATE INDEX IF NOT EXISTS ix_route_spots_id ON route_spots (id);
+CREATE INDEX IF NOT EXISTS ix_route_spots_route_plan_id ON route_spots (route_plan_id);
+CREATE INDEX IF NOT EXISTS ix_route_spots_spot_id ON route_spots (spot_id);
+
+CREATE TABLE IF NOT EXISTS route_feedback (
+    id SERIAL PRIMARY KEY,
+    route_plan_id INTEGER NOT NULL UNIQUE REFERENCES route_plans(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comment VARCHAR(500),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_route_feedback_id ON route_feedback (id);
+CREATE INDEX IF NOT EXISTS ix_route_feedback_user_id ON route_feedback (user_id);
+
+CREATE TABLE IF NOT EXISTS visitor_behavior_records (
+    id SERIAL PRIMARY KEY,
+    source_record_key VARCHAR(64) NOT NULL,
+    tourist_id VARCHAR(30) NOT NULL,
+    user_nickname VARCHAR(100) NOT NULL,
+    age INTEGER NOT NULL,
+    gender VARCHAR(10) NOT NULL,
+    attraction_name VARCHAR(120) NOT NULL,
+    attraction_content TEXT NOT NULL,
+    attraction_type VARCHAR(50) NOT NULL,
+    visit_date DATE NOT NULL,
+    stay_duration_hours NUMERIC(6, 2) NOT NULL,
+    ticket_cost NUMERIC(10, 2) NOT NULL,
+    food_cost NUMERIC(10, 2) NOT NULL,
+    shopping_cost NUMERIC(10, 2) NOT NULL,
+    transport_cost NUMERIC(10, 2) NOT NULL,
+    entertainment_cost NUMERIC(10, 2) NOT NULL,
+    total_cost NUMERIC(10, 2) NOT NULL,
+    group_size INTEGER NOT NULL,
+    satisfaction INTEGER NOT NULL CHECK (satisfaction BETWEEN 1 AND 5),
+    source_name VARCHAR(255) NOT NULL,
+    imported_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_behavior_source_record_key UNIQUE (source_record_key)
+);
+CREATE INDEX IF NOT EXISTS ix_visitor_behavior_records_id ON visitor_behavior_records (id);
+CREATE INDEX IF NOT EXISTS ix_visitor_behavior_records_source_record_key ON visitor_behavior_records (source_record_key);
+CREATE INDEX IF NOT EXISTS ix_visitor_behavior_records_tourist_id ON visitor_behavior_records (tourist_id);
+CREATE INDEX IF NOT EXISTS ix_visitor_behavior_records_attraction_name ON visitor_behavior_records (attraction_name);
+CREATE INDEX IF NOT EXISTS ix_visitor_behavior_records_attraction_type ON visitor_behavior_records (attraction_type);
+CREATE INDEX IF NOT EXISTS ix_visitor_behavior_records_visit_date ON visitor_behavior_records (visit_date);
 
 COMMIT;

@@ -34,16 +34,19 @@ if ($dbHost -notin @("localhost", "127.0.0.1")) {
 
 $previousErrorActionPreference = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
-$existingBinding = docker port ai-tour-guide-postgres 5432/tcp 2>$null | Select-Object -First 1
+$existingPortJson = docker inspect --format '{{json .NetworkSettings.Ports}}' ai-tour-guide-postgres 2>$null
 $dockerPortExitCode = $LASTEXITCODE
 $ErrorActionPreference = $previousErrorActionPreference
 if ($dockerPortExitCode -ne 0) {
   # Docker returns exit code 1 when a pre-existing container is stopped. That is
   # expected after Docker Desktop restarts; compose up below will restore it.
-  $existingBinding = $null
+  $existingPort = $null
+} else {
+  $portBindings = $existingPortJson | ConvertFrom-Json
+  $existingPort = $portBindings.'5432/tcp' | Select-Object -First 1 -ExpandProperty HostPort
 }
-if ($existingBinding -match ":(\d+)$") {
-  $selectedPort = [int]$Matches[1]
+if ($existingPort -match "^\d+$") {
+  $selectedPort = [int]$existingPort
 } else {
   $selectedPort = $dbPort
   $listener = Get-NetTCPConnection -LocalPort $selectedPort -State Listen -ErrorAction SilentlyContinue
@@ -76,6 +79,13 @@ try {
   for ($attempt = 1; $attempt -le 30; $attempt++) {
     $health = docker inspect --format '{{.State.Health.Status}}' ai-tour-guide-postgres 2>$null
     if ($health -eq "healthy") {
+      $databaseExists = docker exec ai-tour-guide-postgres psql -tAc `
+        "SELECT 1 FROM pg_database WHERE datname = '$($dbName.Replace("'", "''"))'" `
+        -U $dbUser -d postgres 2>$null
+      if ($LASTEXITCODE -ne 0 -or $databaseExists.Trim() -ne "1") {
+        Start-Sleep -Seconds 2
+        continue
+      }
       $quotedUser = '"' + $dbUser.Replace('"', '""') + '"'
       $passwordLiteral = $dbPassword.Replace("'", "''")
       $passwordQuery = "ALTER ROLE $quotedUser PASSWORD '$passwordLiteral';"

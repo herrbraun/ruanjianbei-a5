@@ -1,32 +1,49 @@
+param(
+    [string]$DatabaseName = "ai_tour_guide",
+    [string]$HostName = "localhost",
+    [int]$Port = 5432,
+    [string]$Username = "postgres",
+    [string]$Password = $env:PGPASSWORD
+)
+
 $ErrorActionPreference = "Stop"
 
-$envPath = Join-Path $PSScriptRoot "..\backend\.env"
-if (-not (Test-Path $envPath)) {
-  throw "Missing backend\.env. Copy backend\.env.example to backend\.env first."
+if (-not (Get-Command psql -ErrorAction SilentlyContinue)) {
+    throw "psql was not found. Install PostgreSQL client tools or add psql to PATH."
 }
 
-$databaseUrlLine = Get-Content -LiteralPath $envPath | Where-Object { $_ -match "^DATABASE_URL=" } | Select-Object -First 1
-if (-not $databaseUrlLine) {
-  throw "DATABASE_URL not found in backend\.env."
+if ([string]::IsNullOrWhiteSpace($Password)) {
+    $securePassword = Read-Host "PostgreSQL password for $Username" -AsSecureString
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
+    try {
+        $Password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    }
 }
 
-$databaseUrl = ($databaseUrlLine -replace "^DATABASE_URL=", "").Trim()
-if ($databaseUrl -notmatch "^postgresql(?:\+psycopg2)?://([^:]+):([^@]*)@([^:/]+):(\d+)/(.+)$") {
-  throw "Unsupported DATABASE_URL format. Expected postgresql+psycopg2://user:password@host:port/database."
+if ($DatabaseName -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') {
+    throw "DatabaseName must contain only letters, numbers, and underscores, and cannot start with a number."
 }
 
-$dbUser = [System.Uri]::UnescapeDataString($Matches[1])
-$dbPassword = [System.Uri]::UnescapeDataString($Matches[2])
-$hostName = $Matches[3]
-$port = $Matches[4]
-$dbName = $Matches[5]
+$env:PGPASSWORD = $Password
+try {
+    $exists = & psql -w -h $HostName -p $Port -U $Username -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$DatabaseName'"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to connect to PostgreSQL as '$Username' on ${HostName}:$Port."
+    }
 
-$env:PGPASSWORD = $dbPassword
+    if ($null -ne $exists -and $exists.Trim() -eq "1") {
+        Write-Host "Database '$DatabaseName' already exists."
+        exit 0
+    }
 
-$exists = & psql -h $hostName -p $port -U $dbUser -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$dbName'"
-if ($exists -eq "1") {
-  Write-Host "Database '$dbName' already exists."
-} else {
-  & psql -h $hostName -p $port -U $dbUser -d postgres -c "CREATE DATABASE $dbName"
-  Write-Host "Database '$dbName' created."
+    & psql -w -h $HostName -p $Port -U $Username -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE $DatabaseName"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to create database '$DatabaseName'."
+    }
+
+    Write-Host "Database '$DatabaseName' created."
+} finally {
+    Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
 }

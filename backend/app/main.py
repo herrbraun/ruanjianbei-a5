@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, avatar, guide, knowledge, rag
+from app.routers import admin_analytics, auth, avatar, guide, knowledge, rag, routes, spots
 
 
 app = FastAPI(title="AI Digital Human Tour Guide API", version="0.1.0")
@@ -26,6 +26,9 @@ app.include_router(avatar.router, prefix="/api")
 app.include_router(knowledge.router, prefix="/api")
 app.include_router(rag.router, prefix="/api")
 app.include_router(guide.router, prefix="/api")
+app.include_router(spots.router, prefix="/api")
+app.include_router(routes.router, prefix="/api")
+app.include_router(admin_analytics.router, prefix="/api")
 
 
 @app.get("/api/health")
@@ -39,6 +42,13 @@ def health_check() -> dict[str, str]:
 frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 frontend_index = frontend_dist / "index.html"
 frontend_animations = frontend_dist / "animations"
+upload_root = Path(__file__).resolve().parents[1] / "uploads"
+static_root = Path(__file__).resolve().parents[1] / "static"
+
+upload_root.mkdir(parents=True, exist_ok=True)
+static_root.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=upload_root), name="uploads")
+app.mount("/static", StaticFiles(directory=static_root), name="static")
 
 if frontend_index.is_file():
     app.mount("/assets", StaticFiles(directory=frontend_dist / "assets"), name="frontend-assets")
