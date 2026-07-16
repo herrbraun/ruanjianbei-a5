@@ -2,7 +2,7 @@
 
 ## 数字人本地素材
 
-管理员可从“数字人形象管理”上传 `.vrm`。模型保存在 `backend/uploads/avatars/`，该目录只属于本地媒体数据，不能提交 Git。上传限制为 80MB，服务端会检查 `.vrm` 后缀和 GLB `glTF` 文件头。
+管理员可从“数字人形象管理”上传 `.vrm`。模型保存在 `backend/uploads/avatars/`；比赛使用的自制 `.vrm` 会纳入版本控制，知识库原文件和游客头像仍保持忽略。上传限制为 80MB，服务端会检查 `.vrm` 后缀和 GLB `glTF` 文件头。
 
 执行迁移后，可用以下命令把十个自制灵山讲解员导入默认灵山景区：
 
@@ -76,6 +76,7 @@ Copy-Item frontend\.env.example frontend\.env
 ```powershell
 cd backend
 alembic upgrade head
+$env:INITIAL_ADMIN_PASSWORD = Read-Host "请输入至少 12 位的管理员初始密码"
 python scripts\init_admin.py
 uvicorn app.main:app --reload
 ```

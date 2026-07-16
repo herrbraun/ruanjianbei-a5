@@ -1,4 +1,5 @@
 import { http } from './http'
+import { AI_API_TIMEOUT_MS } from './timeouts'
 
 export interface GuideSession {
   id: number
@@ -56,15 +57,20 @@ export const guideApi = {
   listSessions: () => http.get<GuideSession[]>('/guide/sessions'),
   listMessages: (sessionId: number) => http.get<GuideMessage[]>(`/guide/sessions/${sessionId}/messages`),
   sendMessage: (sessionId: number, content: string, inputMode: 'text' | 'voice') =>
-    http.post<GuideConversationResponse>(`/guide/sessions/${sessionId}/messages`, { content, input_mode: inputMode }),
+    http.post<GuideConversationResponse>(
+      `/guide/sessions/${sessionId}/messages`,
+      { content, input_mode: inputMode },
+      { timeout: AI_API_TIMEOUT_MS },
+    ),
   transcribe: (file: Blob) => {
     const form = new FormData()
     form.append('file', file, 'guide-recording.webm')
-    return http.post<AsrResult>('/guide/asr', form)
+    return http.post<AsrResult>('/guide/asr', form, { timeout: AI_API_TIMEOUT_MS })
   },
   synthesize: (messageId: number, avatarVariantId?: number) =>
     http.post<Blob>(`/guide/messages/${messageId}/speech`, undefined, {
       params: avatarVariantId ? { avatar_variant_id: avatarVariantId } : undefined,
       responseType: 'blob',
+      timeout: AI_API_TIMEOUT_MS,
     }),
 }

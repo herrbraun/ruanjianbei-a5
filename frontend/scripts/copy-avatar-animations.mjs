@@ -6,7 +6,7 @@ const scriptDirectory = dirname(fileURLToPath(import.meta.url))
 const source = resolve(scriptDirectory, '../public/animations')
 const outputDirectory = process.env.AVATAR_ANIMATION_OUTPUT_DIR
   ? resolve(process.env.AVATAR_ANIMATION_OUTPUT_DIR)
-  : resolve(scriptDirectory, '../dist/assets/animations')
+  : resolve(scriptDirectory, '../dist/animations')
 
 if (!existsSync(source)) {
   console.warn(`Avatar animation directory is absent: ${source}`)

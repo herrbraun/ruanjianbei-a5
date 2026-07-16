@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     secret_key: str
     access_token_expire_minutes: int = 1440
     backend_cors_origins: str = "http://localhost:5173"
+    initial_admin_username: str = "admin"
+    initial_admin_password: str = ""
     llm_provider: str = "dashscope"
     dashscope_api_key: str = ""
     dashscope_api_host: str = "dashscope.aliyuncs.com"

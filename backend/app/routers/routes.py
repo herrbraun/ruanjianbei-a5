@@ -49,6 +49,7 @@ def serialize_route_spot(route_spot: RouteSpot) -> dict:
 def serialize_route_plan(route_plan: RoutePlan) -> dict:
     return {
         "id": route_plan.id,
+        "scenic_area": route_plan.scenic_area,
         "interest": route_plan.interest,
         "start_spot_id": route_plan.start_spot_id,
         "preference": route_plan.preference,

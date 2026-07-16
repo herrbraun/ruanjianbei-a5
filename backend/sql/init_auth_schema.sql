@@ -344,6 +344,7 @@ CREATE TABLE IF NOT EXISTS route_plans (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     start_spot_id INTEGER REFERENCES scenic_spots(id) ON DELETE SET NULL,
+    scenic_area VARCHAR(120) NOT NULL,
     interest VARCHAR(100) NOT NULL,
     preference VARCHAR(20) NOT NULL DEFAULT 'balanced' CHECK (preference IN ('balanced', 'priority', 'more_spots')),
     duration_minutes INTEGER NOT NULL,
@@ -354,6 +355,7 @@ CREATE TABLE IF NOT EXISTS route_plans (
 CREATE INDEX IF NOT EXISTS ix_route_plans_id ON route_plans (id);
 CREATE INDEX IF NOT EXISTS ix_route_plans_user_id ON route_plans (user_id);
 CREATE INDEX IF NOT EXISTS ix_route_plans_start_spot_id ON route_plans (start_spot_id);
+CREATE INDEX IF NOT EXISTS ix_route_plans_scenic_area ON route_plans (scenic_area);
 
 CREATE TABLE IF NOT EXISTS route_spots (
     id SERIAL PRIMARY KEY,

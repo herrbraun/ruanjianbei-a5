@@ -96,10 +96,11 @@ def build_route_reason(interest: str, selected: list[ScenicSpot], had_tag_match:
 def recommend_route(db: Session, user: User, payload: RouteRecommendRequest) -> RoutePlan:
     setting_model = get_route_settings(db)
     settings = serialize_route_settings(setting_model)
+    scenic_area = payload.scenic_area.strip()
     stmt = (
         select(ScenicSpot)
         .options(selectinload(ScenicSpot.tags))
-        .where(ScenicSpot.status == "enabled")
+        .where(ScenicSpot.status == "enabled", ScenicSpot.scenic_area == scenic_area)
     )
     if not settings["include_service_points"]:
         stmt = stmt.where(ScenicSpot.spot_type != "service")
@@ -137,6 +138,7 @@ def recommend_route(db: Session, user: User, payload: RouteRecommendRequest) -> 
     route_plan = RoutePlan(
         user_id=user.id,
         start_spot_id=payload.start_spot_id,
+        scenic_area=scenic_area,
         interest=payload.interest.strip(),
         preference=payload.preference,
         duration_minutes=payload.duration_minutes,
@@ -213,6 +215,7 @@ def list_admin_routes(db: Session, *, interest: str | None = None, rating: int |
             "id": plan.id,
             "user_id": plan.user_id,
             "visitor_name": nickname,
+            "scenic_area": plan.scenic_area,
             "interest": plan.interest,
             "start_spot_id": plan.start_spot_id,
             "preference": plan.preference,

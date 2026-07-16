@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import admin_analytics, auth, avatar, guide, knowledge, rag, routes, spots
+from app.routers import admin_analytics, auth, avatar, guide, knowledge, media, rag, routes, spots
 
 
 app = FastAPI(title="AI Digital Human Tour Guide API", version="0.1.0")
@@ -29,6 +29,7 @@ app.include_router(guide.router, prefix="/api")
 app.include_router(spots.router, prefix="/api")
 app.include_router(routes.router, prefix="/api")
 app.include_router(admin_analytics.router, prefix="/api")
+app.include_router(media.router)
 
 
 @app.get("/api/health")
@@ -42,12 +43,9 @@ def health_check() -> dict[str, str]:
 frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 frontend_index = frontend_dist / "index.html"
 frontend_animations = frontend_dist / "animations"
-upload_root = Path(__file__).resolve().parents[1] / "uploads"
 static_root = Path(__file__).resolve().parents[1] / "static"
 
-upload_root.mkdir(parents=True, exist_ok=True)
 static_root.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=upload_root), name="uploads")
 app.mount("/static", StaticFiles(directory=static_root), name="static")
 
 if frontend_index.is_file():
@@ -57,6 +55,6 @@ if frontend_index.is_file():
 
     @app.get("/{frontend_path:path}", include_in_schema=False)
     def serve_frontend(frontend_path: str) -> FileResponse:
-        if frontend_path.startswith("api/"):
+        if frontend_path.startswith(("api/", "uploads/")):
             raise HTTPException(status_code=404, detail="Not found")
         return FileResponse(frontend_index)

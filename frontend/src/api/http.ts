@@ -1,5 +1,7 @@
 import axios from 'axios'
 
+import { DEFAULT_API_TIMEOUT_MS } from './timeouts'
+
 type UnauthorizedHandler = () => void
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
@@ -11,7 +13,7 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler) {
 
 export const http = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: DEFAULT_API_TIMEOUT_MS,
 })
 
 http.interceptors.request.use((config) => {

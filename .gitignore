@@ -33,7 +33,6 @@ frontend/npm-cache/
 frontend/.turbo/
 frontend/coverage/
 frontend/.eslintcache
-frontend/public/animations/mixamo/
 *.tsbuildinfo
 
 # Python
@@ -62,7 +61,10 @@ pip-wheel-metadata/
 
 # Backend runtime files
 backend/static/audio/
-backend/uploads/
+backend/uploads/*
+!backend/uploads/avatars/
+backend/uploads/avatars/*
+!backend/uploads/avatars/*.vrm
 backend/data/vector_db/
 backend/data/docs/
 

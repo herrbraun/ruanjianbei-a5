@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Check, Location, MapLocation, Timer } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 
 import { getInterestOptions } from '@/api/auth'
 import { getSpots, type ScenicSpot } from '@/api/spots'
@@ -19,13 +19,18 @@ const routePlan = ref<RoutePlan | null>(null)
 const spots = ref<ScenicSpot[]>([])
 const interestOptions = ref<string[]>([])
 const selectedInterests = ref<string[]>([...(authStore.user?.interests || [])])
-const form = reactive({ duration_minutes: 120, start_spot_id: undefined as number | undefined, preference: 'balanced' as RoutePreference })
+const form = reactive({ scenic_area: '', duration_minutes: 120, start_spot_id: undefined as number | undefined, preference: 'balanced' as RoutePreference })
 const feedback = reactive({ rating: 5, comment: '' })
 const preferenceLabels: Record<RoutePreference, string> = { balanced: '综合平衡', priority: '核心景点优先', more_spots: '尽量多游览' }
+const scenicAreas = computed(() => [...new Set(spots.value.map((spot) => spot.scenic_area))])
+const availableStartSpots = computed(() => spots.value.filter((spot) => spot.scenic_area === form.scenic_area))
 
 async function loadSpots() {
   spotLoading.value = true
-  try { spots.value = (await getSpots()).data }
+  try {
+    spots.value = (await getSpots()).data
+    if (!form.scenic_area) form.scenic_area = scenicAreas.value[0] || ''
+  }
   catch { ElMessage.error('起点列表加载失败，请刷新页面重试') }
   finally { spotLoading.value = false }
 }
@@ -41,7 +46,7 @@ async function createRoute() {
   loading.value = true
   feedbackSubmitted.value = false
   try {
-    routePlan.value = (await recommendRoute({ interest: selectedInterests.value.join(','), duration_minutes: form.duration_minutes, start_spot_id: form.start_spot_id, preference: form.preference })).data
+    routePlan.value = (await recommendRoute({ scenic_area: form.scenic_area, interest: selectedInterests.value.join(','), duration_minutes: form.duration_minutes, start_spot_id: form.start_spot_id, preference: form.preference })).data
     ElMessage.success('路线已生成')
   } catch { ElMessage.error('路线生成失败，请检查起点或增加游玩时长') }
   finally { loading.value = false }
@@ -58,6 +63,7 @@ async function submitFeedback() {
   finally { feedbackLoading.value = false }
 }
 
+watch(() => form.scenic_area, () => { form.start_spot_id = undefined })
 onMounted(() => { loadSpots(); loadInterests() })
 </script>
 
@@ -69,12 +75,13 @@ onMounted(() => { loadSpots(); loadInterests() })
       <section class="route-form-panel">
         <div class="section-heading compact"><div><span>路线条件</span><h2>告诉我们你的计划</h2></div></div>
         <el-form label-position="top" @submit.prevent="createRoute">
+          <el-form-item label="所属景区" required><el-select v-model="form.scenic_area" :loading="spotLoading" placeholder="请选择景区"><el-option v-for="area in scenicAreas" :key="area" :label="area" :value="area" /></el-select></el-form-item>
           <el-form-item label="兴趣偏好" required><div class="interest-field"><InterestSelector v-model="selectedInterests" :options="interestOptions" /><p class="selection-count">已选择 {{ selectedInterests.length }} / 8</p></div></el-form-item>
           <el-form-item label="游玩时长" required><div class="duration-control"><el-input-number v-model="form.duration_minutes" :min="15" :max="480" :step="15" /><span>分钟</span></div></el-form-item>
-          <el-form-item label="起点（可选）"><el-select v-model="form.start_spot_id" filterable clearable :loading="spotLoading" placeholder="暂不指定起点"><el-option v-for="spot in spots" :key="spot.id" :label="`${spot.scenic_area} · ${spot.name}`" :value="spot.id" /></el-select></el-form-item>
+          <el-form-item label="起点（可选）"><el-select v-model="form.start_spot_id" filterable clearable :loading="spotLoading" placeholder="暂不指定起点"><el-option v-for="spot in availableStartSpots" :key="spot.id" :label="spot.name" :value="spot.id" /></el-select></el-form-item>
           <el-form-item label="推荐偏好"><el-radio-group v-model="form.preference" class="preference-group"><el-radio-button value="balanced">综合平衡</el-radio-button><el-radio-button value="priority">核心优先</el-radio-button><el-radio-button value="more_spots">更多景点</el-radio-button></el-radio-group></el-form-item>
           <p class="form-helper">预计停留时间不会超过你设置的游玩时长。</p>
-          <el-button class="full-button" type="primary" :icon="MapLocation" :loading="loading" :disabled="!selectedInterests.length" @click="createRoute">生成游览路线</el-button>
+          <el-button class="full-button" type="primary" :icon="MapLocation" :loading="loading" :disabled="!form.scenic_area || !selectedInterests.length" @click="createRoute">生成游览路线</el-button>
         </el-form>
       </section>
 

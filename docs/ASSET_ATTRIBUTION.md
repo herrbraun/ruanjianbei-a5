@@ -21,6 +21,6 @@
 | 讲解 | `Talking`（General Conversation） | `speaking.vrma` | 循环 |
 
 - 存放位置：`frontend/public/animations/mixamo/`。
-- 前端构建会通过 `frontend/scripts/copy-avatar-animations.mjs` 将整个 `public/animations` 目录镜像到 `dist/assets/animations`，与 FastAPI 的 `/assets` 静态托管兼容。
-- 这些来自账户下载的原始/转换动作文件不提交到公开 Git 仓库，目录已被 `.gitignore` 忽略；比赛本机运行和打包时保留即可。
-- 若换电脑或重新部署，请由拥有 Mixamo 使用资格的操作者重新下载并转换相同动作，再放回上述目录。不要将原始 FBX 或独立 VRMA 动作素材作为可下载资源再分发。
+- 前端构建会通过 `frontend/scripts/copy-avatar-animations.mjs` 将整个 `public/animations` 目录镜像到 `dist/animations`；Vite 开发环境和 FastAPI 生产托管统一通过 `/animations` 访问。
+- 转换后的动作随比赛项目仓库保存，确保换电脑和部署时能够还原展示效果；不得把原始 FBX 或独立 VRMA 文件作为单独素材包发布、销售或提供下载。
+- 若仓库改为公开仓库或对外发行，需先重新确认 Adobe Mixamo 对当前分发方式的授权条件，必要时改用明确允许再分发的动作素材。

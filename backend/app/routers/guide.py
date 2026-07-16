@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, Up
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.crud.guide import (
     create_guide_message,
     create_guide_session,
@@ -174,12 +175,14 @@ async def transcribe_audio(
 ) -> AsrResponse:
     del current_user
     content_type = file.content_type
-    if content_type and not content_type.startswith("audio/"):
-        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Please upload an audio file")
     try:
-        audio = await file.read()
+        if content_type and not content_type.startswith("audio/"):
+            raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Please upload an audio file")
+        audio = await file.read(settings.guide_max_audio_bytes + 1)
     finally:
         await file.close()
+    if len(audio) > settings.guide_max_audio_bytes:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="录音文件不能超过 6 MB")
     try:
         recognized = await run_in_threadpool(recognize_speech, audio, content_type)
     except SpeechError as exc:

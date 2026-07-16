@@ -70,7 +70,7 @@
 ```json
 {
   "username": "admin",
-  "password": "123456"
+  "password": "your-admin-password"
 }
 ```
 

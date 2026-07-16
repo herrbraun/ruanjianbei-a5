@@ -17,6 +17,7 @@ export interface RouteSpot {
 
 export interface RoutePlan {
   id: number
+  scenic_area: string
   interest: string
   start_spot_id: number | null
   preference: RoutePreference
@@ -39,6 +40,7 @@ export interface AdminRoute {
   id: number
   user_id: number | null
   visitor_name: string | null
+  scenic_area: string
   interest: string
   start_spot_id: number | null
   preference: RoutePreference
@@ -59,6 +61,7 @@ export interface RouteSettings {
 }
 
 export function recommendRoute(payload: {
+  scenic_area: string
   interest: string
   duration_minutes: number
   start_spot_id?: number

@@ -118,6 +118,7 @@ class RoutePlan(Base):
     start_spot_id: Mapped[int | None] = mapped_column(
         ForeignKey("scenic_spots.id", ondelete="SET NULL"), index=True, nullable=True
     )
+    scenic_area: Mapped[str] = mapped_column(String(120), index=True, nullable=False)
     interest: Mapped[str] = mapped_column(String(100), nullable=False)
     preference: Mapped[str] = mapped_column(String(20), nullable=False, default="balanced")
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)

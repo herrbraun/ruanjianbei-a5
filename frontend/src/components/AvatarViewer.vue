@@ -13,11 +13,11 @@ type AvatarState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'welcome' | 
 type AnimatedState = Exclude<AvatarState, 'listening'>
 
 const ANIMATION_ASSETS: Record<AnimatedState, { url: string; loop: boolean }> = {
-  idle: { url: '/assets/animations/chatvrm-idle-loop.vrma', loop: true },
-  welcome: { url: '/assets/animations/mixamo/welcome-wave.vrma', loop: false },
-  guiding: { url: '/assets/animations/mixamo/guide-point.vrma', loop: false },
-  thinking: { url: '/assets/animations/mixamo/thinking.vrma', loop: true },
-  speaking: { url: '/assets/animations/mixamo/speaking.vrma', loop: true },
+  idle: { url: '/animations/chatvrm-idle-loop.vrma', loop: true },
+  welcome: { url: '/animations/mixamo/welcome-wave.vrma', loop: false },
+  guiding: { url: '/animations/mixamo/guide-point.vrma', loop: false },
+  thinking: { url: '/animations/mixamo/thinking.vrma', loop: true },
+  speaking: { url: '/animations/mixamo/speaking.vrma', loop: true },
 }
 
 const props = defineProps<{

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class RouteRecommendRequest(BaseModel):
+    scenic_area: str = Field(min_length=1, max_length=120)
     interest: str = Field(min_length=1, max_length=100)
     duration_minutes: int = Field(ge=15, le=480)
     start_spot_id: int | None = Field(default=None, gt=0)
@@ -27,6 +28,7 @@ class RouteSpotResponse(BaseModel):
 
 class RoutePlanResponse(BaseModel):
     id: int
+    scenic_area: str
     interest: str
     start_spot_id: int | None
     preference: str
@@ -69,6 +71,7 @@ class AdminRouteResponse(BaseModel):
     id: int
     user_id: int | None
     visitor_name: str | None
+    scenic_area: str
     interest: str
     start_spot_id: int | None
     preference: str
