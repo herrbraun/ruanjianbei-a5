@@ -58,3 +58,14 @@ class InsightReportOut(BaseModel):
     error_message: str | None
     generated_at: datetime | None
     created_at: datetime
+
+
+class ReportNarrative(BaseModel):
+    summary: str = Field(min_length=1, max_length=2000)
+    attention_points: list[str] = Field(min_length=3, max_length=3)
+    risk_findings: list[str] = Field(min_length=1, max_length=10)
+    recommendations: list[str] = Field(min_length=3, max_length=5)
+
+
+class InsightResolve(BaseModel):
+    resolved: bool = True

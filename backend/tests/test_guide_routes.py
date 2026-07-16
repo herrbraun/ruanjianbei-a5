@@ -5,6 +5,10 @@ from unittest.mock import Mock
 from fastapi.testclient import TestClient
 
 from app.config import settings
+from app.database import get_db
+from app.models.guide import GuideMessageInsight, GuideSession
+from app.models.knowledge import RagProfile, ScenicArea
+from app.services.guide_answer import GuideGeneratedAnswer
 
 
 def visitor_headers(client: TestClient) -> dict[str, str]:
@@ -32,3 +36,37 @@ def test_asr_rejects_oversized_upload_before_transcoding(
 
     assert response.status_code == 413
     recognize.assert_not_called()
+
+
+def test_chat_creates_pending_insight_and_schedules_analysis(client: TestClient, monkeypatch) -> None:
+    headers = visitor_headers(client)
+    override = client.app.dependency_overrides[get_db]
+    generator = override()
+    db = next(generator)
+    try:
+        user_id = client.get("/api/auth/me", headers=headers).json()["id"]
+        scenic = ScenicArea(code="insight-chat", name="洞察测试景区", is_enabled=True)
+        db.add(scenic); db.flush()
+        profile = RagProfile(scenic_area_id=scenic.id, name="洞察测试版", status="active")
+        db.add(profile); db.flush()
+        session = GuideSession(user_id=user_id, scenic_area_id=scenic.id, initial_rag_profile_id=profile.id)
+        db.add(session); db.commit(); session_id = session.id
+    finally:
+        generator.close()
+
+    process = Mock()
+    monkeypatch.setattr("app.routers.guide.search_profile", lambda *args, **kwargs: {"hits": []})
+    monkeypatch.setattr("app.routers.guide.generate_guide_answer", lambda **kwargs: GuideGeneratedAnswer(content="测试回答", model="test", duration_ms=5))
+    monkeypatch.setattr("app.routers.guide.process_insight", process)
+
+    response = client.post(f"/api/guide/sessions/{session_id}/messages", headers=headers, json={"content": "这里有什么故事？", "input_mode": "text"})
+    assert response.status_code == 200
+    process.assert_called_once()
+
+    generator = override(); db = next(generator)
+    try:
+        row = db.query(GuideMessageInsight).one()
+        assert row.analysis_status == "pending"
+        assert row.visitor_message_id == response.json()["visitor_message"]["id"]
+    finally:
+        generator.close()

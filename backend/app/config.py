@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     llm_chat_model: str = "qwen-plus"
     llm_embedding_model: str = "text-embedding-v4"
     llm_rerank_model: str = "qwen3-rerank"
+    insight_analysis_model: str = "qwen-plus"
+    insight_report_model: str = "qwen-plus"
     rag_vector_backend: str = "pgvector"
     rag_json_candidate_limit: int = Field(default=2000, ge=1, le=10000)
     asr_model: str = "qwen3-asr-flash"

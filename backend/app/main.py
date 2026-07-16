@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -8,10 +10,22 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import admin_analytics, auth, avatar, guide, knowledge, media, rag, routes, spots
+from app.crud.insights import recover_stale_insights
+from app.database import SessionLocal
+from app.routers import admin_analytics, auth, avatar, guide, insights, knowledge, media, rag, routes, spots
 
 
-app = FastAPI(title="AI Digital Human Tour Guide API", version="0.1.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    if settings.resolved_database_url.startswith("sqlite"):
+        yield
+        return
+    with SessionLocal() as db:
+        recover_stale_insights(db, datetime.now(timezone.utc) - timedelta(minutes=10))
+    yield
+
+
+app = FastAPI(title="AI Digital Human Tour Guide API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,6 +43,7 @@ app.include_router(guide.router, prefix="/api")
 app.include_router(spots.router, prefix="/api")
 app.include_router(routes.router, prefix="/api")
 app.include_router(admin_analytics.router, prefix="/api")
+app.include_router(insights.router, prefix="/api")
 app.include_router(media.router)
 
 

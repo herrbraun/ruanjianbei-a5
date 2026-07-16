@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,7 @@ from app.crud.guide import (
 )
 from app.crud.avatar import default_scenic_avatar_config, get_scenic_avatar_config
 from app.crud.knowledge import get_active_profile, get_scenic_area_by_code, get_scenic_area_by_id
+from app.crud.insights import ensure_pending_insight, process_insight
 from app.database import get_db
 from app.models.guide import GuideFeedback, GuideMessage, GuideSession
 from app.models.user import User
@@ -142,6 +143,7 @@ def submit_session_feedback(
 def create_message(
     session_id: int,
     payload: GuideMessageCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_visitor),
     db: Session = Depends(get_db),
 ) -> GuideConversationResponse:
@@ -197,6 +199,8 @@ def create_message(
             error_message=str(exc)[:2000],
         )
     touch_guide_session(db, session)
+    insight = ensure_pending_insight(db, session, visitor_message, assistant_message)
+    background_tasks.add_task(process_insight, insight.id)
     return GuideConversationResponse(
         visitor_message=visitor_message,
         assistant_message=assistant_message,
