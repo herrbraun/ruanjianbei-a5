@@ -258,7 +258,7 @@ async function loadVrm() {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       signal: controller.signal,
     })
-    if (!response.ok) throw new Error(`模型读取失败（${response.status}）`)
+    if (!response.ok) throw new Error(`讲解员形象读取失败（${response.status}）`)
     const buffer = await response.arrayBuffer()
     const loader = new GLTFLoader()
     loader.register((parser) => new VRMLoaderPlugin(parser))
@@ -270,7 +270,7 @@ async function loadVrm() {
     const vrm = gltf.userData.vrm as VRM | undefined
     if (!vrm) {
       disposeParsedGltf(gltf)
-      throw new Error('该文件未包含可用的 VRM 数据')
+      throw new Error('该文件未包含可用的 3D 讲解员形象')
     }
     currentVrm = vrm
     // VRM models face +Z by convention; the previous 180° correction made
@@ -285,7 +285,7 @@ async function loadVrm() {
   } catch (error) {
     if (controller.signal.aborted || version !== loadVersion) return
     renderFailed.value = true
-    emit('error', error instanceof Error ? error.message : '数字人模型加载失败')
+    emit('error', error instanceof Error ? error.message : '讲解员形象加载失败')
   } finally {
     if (activeLoadController === controller) activeLoadController = undefined
   }
@@ -369,7 +369,7 @@ onMounted(() => {
     animationFrame = requestAnimationFrame(updateAvatar)
   } catch {
     unsupported.value = true
-    emit('error', '当前设备不支持 WebGL 数字人展示')
+    emit('error', '当前设备暂不支持 3D 讲解员形象')
   }
 })
 

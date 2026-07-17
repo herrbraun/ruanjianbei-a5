@@ -51,10 +51,21 @@ const riskFilters = reactive({
   issue_type: '',
   analysis_status: '',
   resolution_status: 'unresolved',
-  needs_attention: true as boolean | undefined,
+  needs_attention: true,
 })
 
-const issueTypes = ['排队时间', '路线指引', '价格问题', '环境卫生', '工作人员服务', '数字人回答不准确', '响应速度', '语音或数字人体验', '设施问题', '无明确问题']
+const issueTypes = [
+  { label: '排队时间', value: '排队时间' },
+  { label: '路线指引', value: '路线指引' },
+  { label: '价格问题', value: '价格问题' },
+  { label: '环境卫生', value: '环境卫生' },
+  { label: '工作人员服务', value: '工作人员服务' },
+  { label: '讲解回答不准确', value: '数字人回答不准确' },
+  { label: '响应速度', value: '响应速度' },
+  { label: '语音或讲解员体验', value: '语音或数字人体验' },
+  { label: '设施问题', value: '设施问题' },
+  { label: '无明确问题', value: '无明确问题' },
+]
 const weekdayOptions = [
   { label: '周一', value: 0 }, { label: '周二', value: 1 }, { label: '周三', value: 2 },
   { label: '周四', value: 3 }, { label: '周五', value: 4 }, { label: '周六', value: 5 },
@@ -76,6 +87,10 @@ function analysisStatusText(status: InsightMessage['analysis_status']) {
 
 function sentimentText(value: InsightMessage['sentiment']) {
   return value ? { positive: '正向', neutral: '中性', negative: '负向' }[value] : '未分析'
+}
+
+function issueTypeText(value: string | null) {
+  return issueTypes.find((item) => item.value === value)?.label || value || '未分类'
 }
 
 async function loadReports(selectId?: number) {
@@ -224,7 +239,7 @@ async function loadRisks() {
       issue_type: riskFilters.issue_type || undefined,
       analysis_status: riskFilters.analysis_status || undefined,
       resolution_status: riskFilters.resolution_status || undefined,
-      needs_attention: riskFilters.needs_attention,
+      needs_attention: riskFilters.needs_attention || undefined,
       start_date: riskRange.value[0],
       end_date: riskRange.value[1],
       page: riskPage.value,
@@ -233,7 +248,7 @@ async function loadRisks() {
     risks.value = data.items
     riskTotal.value = data.total
   } catch (error) {
-    ElMessage.error(errorText(error, '风险事项加载失败'))
+    ElMessage.error(errorText(error, '待关注事项加载失败'))
   } finally {
     loadingRisks.value = false
   }
@@ -294,7 +309,7 @@ async function initialize() {
     selectedScenicAreaId.value = scenicAreas.value.some((item) => item.id === requested) ? requested : scenicAreas.value[0]?.id
     await Promise.all([loadReports(), loadRisks(), loadSchedule()])
   } catch (error) {
-    ElMessage.error(errorText(error, '游客洞察工作台初始化失败'))
+    ElMessage.error(errorText(error, '服务反馈页面加载失败'))
   }
 }
 
@@ -310,7 +325,7 @@ onBeforeUnmount(() => { if (reportPollTimer) clearTimeout(reportPollTimer) })
 </script>
 
 <template>
-  <AppLayout title="游客洞察" description="生成景区感受度报告，跟进负向反馈、服务风险和分析失败记录。" role-label="运营管理">
+  <AppLayout title="服务反馈" description="汇总游客感受，跟进需要关注的问题和改进事项。" role-label="景区运营">
     <template #actions><el-button :icon="Refresh" @click="activeTab === 'reports' ? loadReports() : loadRisks()">刷新</el-button></template>
 
     <section class="insights-toolbar">
@@ -319,7 +334,7 @@ onBeforeUnmount(() => { if (reportPollTimer) clearTimeout(reportPollTimer) })
     </section>
 
     <el-tabs v-model="activeTab" class="insights-tabs">
-      <el-tab-pane label="感受度报告" name="reports">
+      <el-tab-pane label="游客感受报告" name="reports">
         <section class="report-create-bar">
           <el-radio-group v-model="reportType"><el-radio-button value="daily">日报</el-radio-button><el-radio-button value="weekly">周报</el-radio-button></el-radio-group>
           <el-date-picker v-model="reportRange" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" :shortcuts="dateShortcuts" :clearable="false" />
@@ -328,8 +343,8 @@ onBeforeUnmount(() => { if (reportPollTimer) clearTimeout(reportPollTimer) })
 
         <section v-if="schedule" class="report-schedule-card">
           <header>
-            <div><span><Clock /> AUTOMATION</span><h2>自动报告计划</h2></div>
-            <small>按 Asia/Shanghai 生成上一完整周期，服务重启后会自动补偿遗漏任务。</small>
+            <div><span><Clock /> 定时生成</span><h2>自动报告计划</h2></div>
+            <small>按设定时间汇总上一完整周期的游客反馈。</small>
           </header>
           <div class="report-schedule-grid">
             <article>
@@ -344,7 +359,7 @@ onBeforeUnmount(() => { if (reportPollTimer) clearTimeout(reportPollTimer) })
               <p>生成执行日前连续七天的完整周报。</p>
             </article>
           </div>
-          <footer><span>时区：{{ schedule.timezone }}</span><el-button type="primary" plain :loading="savingSchedule" @click="saveSchedule">保存自动计划</el-button></footer>
+          <footer><span>北京时间</span><el-button type="primary" plain :loading="savingSchedule" @click="saveSchedule">保存自动计划</el-button></footer>
         </section>
 
         <div class="report-workspace" v-loading="loadingReports">
@@ -358,7 +373,7 @@ onBeforeUnmount(() => { if (reportPollTimer) clearTimeout(reportPollTimer) })
 
           <article v-if="selectedReport" class="report-detail">
             <header><div><span>{{ selectedReport.period_type === 'daily' ? '游客感受度日报' : '游客感受度周报' }} · {{ selectedReport.trigger_source === 'scheduled' ? '自动生成' : '手动生成' }}</span><h2>{{ selectedReport.period_start }} 至 {{ selectedReport.period_end }}</h2></div><div class="report-detail-actions"><el-tag :type="selectedReport.generation_status === 'failed' ? 'danger' : selectedReport.generation_status === 'completed' ? 'success' : 'warning'">{{ reportStatusText(selectedReport.generation_status) }}</el-tag><el-button :icon="Download" :loading="exportingReport" :disabled="selectedReport.generation_status !== 'completed'" @click="exportSelectedReport">导出 Word</el-button><el-button :icon="Printer" :disabled="selectedReport.generation_status !== 'completed'" @click="printSelectedReport">打印 / PDF</el-button></div></header>
-            <div v-if="selectedReport.generation_status === 'pending' || selectedReport.generation_status === 'processing'" class="report-waiting"><el-icon class="is-loading"><Refresh /></el-icon><p>模型正在根据聚合统计生成报告，不会传入游客身份信息。</p></div>
+            <div v-if="selectedReport.generation_status === 'pending' || selectedReport.generation_status === 'processing'" class="report-waiting"><el-icon class="is-loading"><Refresh /></el-icon><p>正在汇总游客反馈并生成报告。</p></div>
             <div v-else-if="selectedReport.generation_status === 'failed'" class="report-failed"><el-alert type="error" :closable="false" title="报告生成失败"><template #default>{{ selectedReport.error_message || '可稍后重试。' }}</template></el-alert><el-button type="primary" plain :icon="Refresh" @click="retrySelectedReport">重新生成</el-button></div>
             <template v-else>
               <section><h3>总体结论</h3><p>{{ selectedReport.summary }}</p></section>
@@ -372,23 +387,23 @@ onBeforeUnmount(() => { if (reportPollTimer) clearTimeout(reportPollTimer) })
         </div>
       </el-tab-pane>
 
-      <el-tab-pane label="风险与待办" name="risks">
+      <el-tab-pane label="待关注事项" name="risks">
         <section class="risk-filter-bar">
           <el-date-picker v-model="riskRange" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" :shortcuts="dateShortcuts" :clearable="false" @change="applyRiskFilters" />
           <el-select v-model="riskFilters.sentiment" clearable placeholder="全部情绪" @change="applyRiskFilters"><el-option label="正向" value="positive" /><el-option label="中性" value="neutral" /><el-option label="负向" value="negative" /></el-select>
-          <el-select v-model="riskFilters.issue_type" clearable placeholder="全部问题类型" @change="applyRiskFilters"><el-option v-for="item in issueTypes" :key="item" :label="item" :value="item" /></el-select>
+          <el-select v-model="riskFilters.issue_type" clearable placeholder="全部问题类型" @change="applyRiskFilters"><el-option v-for="item in issueTypes" :key="item.value" :label="item.label" :value="item.value" /></el-select>
           <el-select v-model="riskFilters.analysis_status" clearable placeholder="全部分析状态" @change="applyRiskFilters"><el-option label="待分析" value="pending" /><el-option label="分析中" value="processing" /><el-option label="已完成" value="completed" /><el-option label="分析失败" value="failed" /></el-select>
           <el-select v-model="riskFilters.resolution_status" clearable placeholder="全部处理状态" @change="applyRiskFilters"><el-option label="待处理" value="unresolved" /><el-option label="已解决" value="resolved" /></el-select>
-          <el-checkbox v-model="riskFilters.needs_attention" :true-value="true" :false-value="undefined" @change="applyRiskFilters">仅需关注</el-checkbox>
+          <el-checkbox v-model="riskFilters.needs_attention" @change="applyRiskFilters">仅需关注</el-checkbox>
           <el-button :icon="Refresh" :loading="retryingFailed" @click="retryAllFailed">重试失败分析</el-button>
         </section>
 
         <el-table v-loading="loadingRisks" :data="risks" class="admin-table" row-key="id" empty-text="暂无符合条件的记录">
-          <el-table-column type="expand"><template #default="{ row }: { row: InsightMessage }"><div class="insight-dialogue-detail"><strong>游客原始问题</strong><p>{{ row.question || '无' }}</p><strong>数字人回答</strong><p>{{ row.answer || '无' }}</p><small v-if="row.error_message">分析诊断：{{ row.error_message }}</small></div></template></el-table-column>
+          <el-table-column type="expand"><template #default="{ row }: { row: InsightMessage }"><div class="insight-dialogue-detail"><strong>游客原始问题</strong><p>{{ row.question || '无' }}</p><strong>讲解员回答</strong><p>{{ row.answer || '无' }}</p><small v-if="row.error_message">未完成原因：{{ row.error_message }}</small></div></template></el-table-column>
           <el-table-column label="游客问题摘要" min-width="220"><template #default="{ row }: { row: InsightMessage }"><strong>{{ row.normalized_question || '待分析' }}</strong></template></el-table-column>
           <el-table-column prop="primary_topic" label="主题" width="120" />
           <el-table-column label="情绪" width="90"><template #default="{ row }: { row: InsightMessage }"><el-tag :type="row.sentiment === 'negative' ? 'danger' : row.sentiment === 'positive' ? 'success' : 'info'">{{ sentimentText(row.sentiment) }}</el-tag></template></el-table-column>
-          <el-table-column prop="issue_type" label="问题类型" width="150" />
+          <el-table-column label="问题类型" width="150"><template #default="{ row }: { row: InsightMessage }">{{ issueTypeText(row.issue_type) }}</template></el-table-column>
           <el-table-column label="分析状态" width="110"><template #default="{ row }: { row: InsightMessage }">{{ analysisStatusText(row.analysis_status) }}</template></el-table-column>
           <el-table-column label="操作" width="190" fixed="right"><template #default="{ row }: { row: InsightMessage }"><el-button v-if="row.analysis_status === 'failed' || row.analysis_status === 'pending'" text type="primary" @click="retryInsight(row)">重试</el-button><el-button text :type="row.resolution_status === 'resolved' ? 'info' : 'success'" @click="toggleResolved(row)">{{ row.resolution_status === 'resolved' ? '重新打开' : '标记解决' }}</el-button></template></el-table-column>
         </el-table>

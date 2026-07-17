@@ -32,6 +32,10 @@ const form = reactive({
   status: 'enabled' as SpotStatus,
 })
 
+function mediaTypeLabel(type: MediaType) {
+  return { image: '图片', video: '视频', audio: '语音' }[type]
+}
+
 function resetForm() {
   editingId.value = null
   form.spot_id = spots.value[0]?.id
@@ -113,17 +117,17 @@ onMounted(loadData)
 </script>
 
 <template>
-  <AppLayout title="素材管理" description="维护景点图片、视频和音频。" role-label="运营管理">
-    <template #actions><el-button type="primary" :icon="Plus" @click="openCreate">新增素材</el-button></template>
-    <section class="data-section"><div class="data-section-header"><div><span>素材库</span><h2>全部素材</h2></div><strong>{{ assets.length }} 个</strong></div>
+  <AppLayout title="景点素材" description="维护景点详情中展示的图片、视频和语音介绍。" role-label="景区运营">
+    <template #actions><el-button type="primary" :icon="Plus" @click="openCreate">添加素材</el-button></template>
+    <section class="data-section"><div class="data-section-header"><div><span>景点内容</span><h2>图片与音视频</h2></div><strong>{{ assets.length }} 项</strong></div>
 
     <el-table v-loading="loading" :data="assets" class="admin-table desktop-table">
       <el-table-column prop="spot_name" label="景点" min-width="150" />
-      <el-table-column prop="media_type" label="类型" width="90" />
+      <el-table-column label="类型" width="90"><template #default="{ row }">{{ mediaTypeLabel(row.media_type) }}</template></el-table-column>
       <el-table-column prop="url" label="素材地址" min-width="260" show-overflow-tooltip />
       <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
       <el-table-column prop="sort_order" label="排序" width="80" />
-      <el-table-column prop="status" label="状态" width="90" />
+      <el-table-column label="游客端" width="90"><template #default="{ row }"><el-tag :type="row.status === 'enabled' ? 'success' : 'info'">{{ row.status === 'enabled' ? '展示中' : '已隐藏' }}</el-tag></template></el-table-column>
       <el-table-column label="操作" width="150">
         <template #default="{ row }">
           <el-button :icon="Edit" size="small" @click="openEdit(row)">编辑</el-button>
@@ -131,11 +135,11 @@ onMounted(loadData)
         </template>
       </el-table-column>
     </el-table>
-    <div v-loading="loading" class="mobile-record-list"><article v-for="asset in assets" :key="asset.id" class="mobile-record-card"><header><div><span>{{ asset.media_type }}</span><h3>{{ asset.spot_name }}</h3></div><el-tag :type="asset.status === 'enabled' ? 'success' : 'info'">{{ asset.status === 'enabled' ? '启用' : '停用' }}</el-tag></header><p>{{ asset.description || '暂无描述' }}</p><a class="asset-url" :href="asset.url" target="_blank" rel="noreferrer">{{ asset.url }}</a><footer><el-button :icon="Edit" @click="openEdit(asset)">编辑</el-button><el-button :icon="Delete" type="danger" plain @click="remove(asset)">删除</el-button></footer></article></div>
+    <div v-loading="loading" class="mobile-record-list"><article v-for="asset in assets" :key="asset.id" class="mobile-record-card"><header><div><span>{{ mediaTypeLabel(asset.media_type) }}</span><h3>{{ asset.spot_name }}</h3></div><el-tag :type="asset.status === 'enabled' ? 'success' : 'info'">{{ asset.status === 'enabled' ? '展示中' : '已隐藏' }}</el-tag></header><p>{{ asset.description || '暂无描述' }}</p><a class="asset-url" :href="asset.url" target="_blank" rel="noreferrer">{{ asset.url }}</a><footer><el-button :icon="Edit" @click="openEdit(asset)">编辑</el-button><el-button :icon="Delete" type="danger" plain @click="remove(asset)">删除</el-button></footer></article></div>
     <el-empty v-if="!loading && assets.length === 0" description="暂未添加素材" />
     </section>
 
-    <el-drawer v-model="dialogVisible" :title="editingId ? '编辑素材' : '新增素材'" size="min(94vw, 560px)">
+    <el-drawer v-model="dialogVisible" :title="editingId ? '编辑景点素材' : '添加景点素材'" size="min(94vw, 560px)">
       <el-form label-position="top" class="drawer-form">
         <el-form-item label="绑定景点" required>
           <el-select v-model="form.spot_id" filterable style="width: 100%">
@@ -154,8 +158,8 @@ onMounted(loadData)
         <el-form-item label="排序"><el-input-number v-model="form.sort_order" :min="0" :max="1000" /></el-form-item>
         <el-form-item label="状态">
           <el-radio-group v-model="form.status">
-            <el-radio-button value="enabled">启用</el-radio-button>
-            <el-radio-button value="disabled">停用</el-radio-button>
+            <el-radio-button value="enabled">展示</el-radio-button>
+            <el-radio-button value="disabled">隐藏</el-radio-button>
           </el-radio-group>
         </el-form-item>
       </el-form>

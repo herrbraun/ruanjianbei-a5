@@ -57,44 +57,44 @@ onMounted(loadScenicAreas)
   <main class="landing-page">
     <div class="landing-grain" aria-hidden="true" />
     <header class="landing-header">
-      <a class="landing-brand" href="#main"><span>灵</span><div><strong>灵境智游</strong><small>DIGITAL SCENIC GUIDE</small></div></a>
+      <a class="landing-brand" href="#main"><span>灵</span><div><strong>灵境智游</strong><small>无锡景区导览</small></div></a>
       <RouterLink class="admin-entrance" to="/admin/login" aria-label="管理员入口" title="管理员入口"><el-icon><Lock /></el-icon><span>管理员入口</span></RouterLink>
     </header>
 
     <section id="main" class="landing-hero">
       <div class="hero-copy">
-        <p class="hero-kicker"><i /> 山水有声 · 智游无界</p>
-        <h1>选一处风景，<br><em>让讲解随你出发。</em></h1>
-        <p class="hero-description">无需注册与登录。选择你要游览的景区，数字讲解员将为你介绍景点故事、规划路线，并随时回答问题。</p>
-        <div class="hero-notes"><span>语音问答</span><span>个性路线</span><span>数字人讲解</span></div>
+        <p class="hero-kicker"><i /> 发现风景 · 从容出发</p>
+        <h1>选好目的地，<br><em>轻松开始游览。</em></h1>
+        <p class="hero-description">查看景点介绍，安排合适的游览路线。途中想了解文化故事、演出时间或服务设施，随时都可以问讲解员。</p>
+        <div class="hero-notes"><span>景点讲解</span><span>路线规划</span><span>游览问答</span></div>
       </div>
 
       <section class="scenic-selector" aria-label="选择景区">
         <div class="selector-number">01</div>
-        <div class="selector-heading"><span>SCENIC DESTINATION</span><h2>今天，想从哪里开始？</h2></div>
+        <div class="selector-heading"><span>选择目的地</span><h2>今天，想去哪里走走？</h2></div>
 
         <div v-if="loading" class="selector-loading"><el-skeleton animated :rows="4" /></div>
         <div v-else-if="loadFailed" class="selector-error">
           <el-icon><RefreshRight /></el-icon><strong>景区列表加载失败</strong><p>请确认网络连接后重新尝试。</p><el-button @click="loadScenicAreas">重新加载</el-button>
         </div>
-        <div v-else-if="!scenicAreas.length" class="selector-error"><el-icon><Location /></el-icon><strong>暂无开放景区</strong><p>管理员上架景区后即可开始导览。</p></div>
+        <div v-else-if="!scenicAreas.length" class="selector-error"><el-icon><Location /></el-icon><strong>暂时没有可选景区</strong><p>景区开放后会在这里显示，请稍后再来。</p></div>
         <template v-else>
           <el-select v-model="selectedCode" class="landing-select" size="large" placeholder="请选择景区" :disabled="starting">
             <el-option v-for="area in scenicAreas" :key="area.code" :label="area.name" :value="area.code" />
           </el-select>
           <article v-if="selectedArea" class="selected-scenic-card">
             <span class="scenic-mark">{{ selectedArea.name.slice(0, 1) }}</span>
-            <div><small>当前目的地</small><strong>{{ selectedArea.name }}</strong><p>{{ selectedArea.description || '景区数字导览服务已准备就绪' }}</p></div>
+            <div><small>本次游览</small><strong>{{ selectedArea.name }}</strong><p>{{ selectedArea.description || '查看景点介绍、游览路线和讲解服务' }}</p></div>
           </article>
           <el-button class="landing-start" type="primary" size="large" :loading="starting" :disabled="!selectedCode" @click="startGuide">
-            开始数字人导览 <el-icon><ArrowRight /></el-icon>
+            进入景区 <el-icon><ArrowRight /></el-icon>
           </el-button>
-          <p class="privacy-note">继续即创建匿名游览身份，仅用于保存本机导览进度与偏好。</p>
+          <p class="privacy-note">可直接使用，无需注册或登录。</p>
         </template>
       </section>
     </section>
 
-    <footer class="landing-footer"><span>AI 数字人景区导览系统</span><span>灵山文化 · 智慧文旅</span></footer>
+    <footer class="landing-footer"><span>灵境智游</span><span>景点 · 路线 · 讲解</span></footer>
   </main>
 </template>
 

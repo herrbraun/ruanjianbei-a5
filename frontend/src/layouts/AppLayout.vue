@@ -39,26 +39,26 @@ const scenicStore = useScenicStore()
 const drawerVisible = ref(false)
 
 const displayName = computed(() => authStore.user?.nickname || authStore.user?.username || '未命名用户')
-const roleName = computed(() => (authStore.user?.role === 'admin' ? '景区管理员' : '匿名游客'))
+const roleName = computed(() => (authStore.user?.role === 'admin' ? '景区运营' : '游客'))
 const avatarUrl = computed(() => resolveAssetUrl(authStore.user?.avatar_url))
 const navigation = computed<NavigationItem[]>(() => {
   if (authStore.user?.role === 'admin') {
     return [
-      { label: '管理首页', to: '/admin', icon: House },
-      { label: '景点管理', to: '/admin/spots', icon: Location },
-      { label: '素材管理', to: '/admin/media', icon: Picture },
-      { label: '路线与反馈', to: '/admin/routes', icon: Tickets },
-      { label: '知识库', to: '/admin/knowledge', icon: Collection },
-      { label: '数字人管理', to: '/admin/avatars', icon: UserFilled },
-      { label: '运营统计', to: '/admin/analytics', icon: DataAnalysis },
-      { label: '游客洞察', to: '/admin/insights', icon: ChatDotRound },
+      { label: '运营首页', to: '/admin', icon: House },
+      { label: '景点内容', to: '/admin/spots', icon: Location },
+      { label: '景点素材', to: '/admin/media', icon: Picture },
+      { label: '路线评价', to: '/admin/routes', icon: Tickets },
+      { label: '问答资料', to: '/admin/knowledge', icon: Collection },
+      { label: '讲解员', to: '/admin/avatars', icon: UserFilled },
+      { label: '运营概览', to: '/admin/analytics', icon: DataAnalysis },
+      { label: '服务反馈', to: '/admin/insights', icon: ChatDotRound },
     ]
   }
   return [
-    { label: '游客首页', to: '/visitor', icon: House },
-    { label: '景点浏览', to: '/visitor/spots', icon: Location },
-    { label: '路线推荐', to: '/visitor/routes', icon: MapLocation },
-    { label: '智能导览', to: '/visitor/guide', icon: ChatDotRound },
+    { label: '首页', to: '/visitor', icon: House },
+    { label: '找景点', to: '/visitor/spots', icon: Location },
+    { label: '规划路线', to: '/visitor/routes', icon: MapLocation },
+    { label: '随身讲解', to: '/visitor/guide', icon: ChatDotRound },
   ]
 })
 
@@ -93,7 +93,7 @@ function switchScenicArea() {
     <aside class="app-sidebar" aria-label="主导航">
       <RouterLink class="brand-lockup" :to="authStore.user?.role === 'admin' ? '/admin' : '/visitor'">
         <span class="brand-seal" aria-hidden="true">灵</span>
-        <span><strong>灵境智游</strong><small>景区导览服务</small></span>
+        <span><strong>灵境智游</strong><small>景点 · 路线 · 讲解</small></span>
       </RouterLink>
 
       <nav class="sidebar-nav">
@@ -117,7 +117,7 @@ function switchScenicArea() {
       </div>
       <div v-else class="sidebar-account visitor-scenic-account">
         <div class="account-avatar" aria-hidden="true"><el-icon><Location /></el-icon></div>
-        <div><strong>{{ scenicStore.selectedName || '当前景区' }}</strong><span>匿名游览模式</span></div>
+        <div><strong>{{ scenicStore.selectedName || '选择景区' }}</strong><span>正在游览</span></div>
         <el-button :icon="SwitchButton" text circle aria-label="切换景区" title="切换景区" @click="switchScenicArea" />
       </div>
     </aside>
@@ -146,14 +146,14 @@ function switchScenicArea() {
 
     <el-drawer v-model="drawerVisible" direction="ltr" size="min(84vw, 320px)" :with-header="false">
       <div class="mobile-drawer">
-        <div class="brand-lockup"><span class="brand-seal" aria-hidden="true">灵</span><span><strong>灵境智游</strong><small>景区导览服务</small></span></div>
+        <div class="brand-lockup"><span class="brand-seal" aria-hidden="true">灵</span><span><strong>灵境智游</strong><small>景点 · 路线 · 讲解</small></span></div>
         <nav class="sidebar-nav" aria-label="移动端主导航">
           <button v-for="item in navigation" :key="item.label" class="nav-item" :class="{ active: isActive(item) }" type="button" @click="navigate(item)">
             <el-icon><component :is="item.icon" /></el-icon><span>{{ item.label }}</span>
           </button>
         </nav>
         <div v-if="authStore.user?.role === 'admin'" class="sidebar-account"><div class="account-avatar" aria-hidden="true"><img v-if="avatarUrl" :src="avatarUrl" alt=""><el-icon v-else><User /></el-icon></div><div><strong>{{ displayName }}</strong><span>{{ roleName }}</span></div><el-button :icon="SwitchButton" text circle aria-label="退出登录" @click="logout" /></div>
-        <div v-else class="sidebar-account visitor-scenic-account"><div class="account-avatar" aria-hidden="true"><el-icon><Location /></el-icon></div><div><strong>{{ scenicStore.selectedName || '当前景区' }}</strong><span>匿名游览模式</span></div><el-button :icon="SwitchButton" text circle aria-label="切换景区" @click="switchScenicArea" /></div>
+        <div v-else class="sidebar-account visitor-scenic-account"><div class="account-avatar" aria-hidden="true"><el-icon><Location /></el-icon></div><div><strong>{{ scenicStore.selectedName || '选择景区' }}</strong><span>正在游览</span></div><el-button :icon="SwitchButton" text circle aria-label="切换景区" @click="switchScenicArea" /></div>
       </div>
     </el-drawer>
   </div>

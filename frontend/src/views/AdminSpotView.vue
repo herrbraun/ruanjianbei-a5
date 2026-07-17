@@ -27,6 +27,10 @@ const form = reactive({
   recommended_duration_minutes: 30, priority: 50, status: 'enabled' as SpotStatus, cover_image_url: '', tagsText: '',
 })
 
+function spotTypeLabel(type: SpotType) {
+  return { attraction: '景点', area: '游览区域', service: '服务设施' }[type]
+}
+
 function resetForm() {
   editingId.value = null
   Object.assign(form, {
@@ -110,7 +114,7 @@ onMounted(loadSpots)
 </script>
 
 <template>
-  <AppLayout title="景点管理" description="维护景点、展区和服务点信息。" role-label="运营管理">
+  <AppLayout title="景点内容" description="维护游客端展示的景点、游览区域和服务设施。" role-label="景区运营">
     <template #actions><el-button type="primary" :icon="Plus" @click="openCreateDialog">新增景点</el-button></template>
 
     <section class="data-section"><div class="data-section-header"><div><span>景点列表</span><h2>全部景点</h2></div><strong>{{ spots.length }} 个</strong></div>
@@ -119,11 +123,11 @@ onMounted(loadSpots)
       <el-table-column prop="external_id" label="景点编号" width="100" />
       <el-table-column prop="scenic_area" label="所属景区" min-width="150" />
       <el-table-column prop="name" label="名称" min-width="150" />
-      <el-table-column prop="spot_type" label="类型" width="100" />
+      <el-table-column label="类型" width="110"><template #default="{ row }">{{ spotTypeLabel(row.spot_type) }}</template></el-table-column>
       <el-table-column label="标签" min-width="180"><template #default="{ row }"><div class="tag-row"><el-tag v-for="tag in row.tags" :key="tag" size="small">{{ tag }}</el-tag></div></template></el-table-column>
-      <el-table-column prop="recommended_duration_minutes" label="停留分钟" width="100" />
-      <el-table-column prop="priority" label="优先级" width="80" />
-      <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="row.status === 'enabled' ? 'success' : 'info'">{{ row.status === 'enabled' ? '启用' : '停用' }}</el-tag></template></el-table-column>
+      <el-table-column prop="recommended_duration_minutes" label="建议游览" width="100" />
+      <el-table-column prop="priority" label="推荐顺序" width="100" />
+      <el-table-column label="游客端" width="90"><template #default="{ row }"><el-tag :type="row.status === 'enabled' ? 'success' : 'info'">{{ row.status === 'enabled' ? '展示中' : '已隐藏' }}</el-tag></template></el-table-column>
       <el-table-column label="操作" width="190" fixed="right"><template #default="{ row }"><el-button size="small" :icon="Edit" @click="openEditDialog(row)">编辑</el-button><el-button size="small" plain @click="toggleStatus(row)">{{ row.status === 'enabled' ? '停用' : '启用' }}</el-button></template></el-table-column>
     </el-table>
     <div v-loading="loading" class="mobile-record-list"><article v-for="spot in spots" :key="spot.id" class="mobile-record-card"><header><div><span>{{ spot.external_id || `#${spot.id}` }}</span><h3>{{ spot.name }}</h3></div><el-tag :type="spot.status === 'enabled' ? 'success' : 'info'">{{ spot.status === 'enabled' ? '启用' : '停用' }}</el-tag></header><p>{{ spot.scenic_area }} · {{ spot.recommended_duration_minutes }} 分钟 · 优先级 {{ spot.priority }}</p><div class="tag-row"><el-tag v-for="tag in spot.tags.slice(0, 4)" :key="tag" size="small" effect="plain">{{ tag }}</el-tag></div><footer><el-button :icon="Edit" @click="openEditDialog(spot)">编辑</el-button><el-button plain @click="toggleStatus(spot)">{{ spot.status === 'enabled' ? '停用' : '启用' }}</el-button></footer></article></div>
@@ -135,7 +139,7 @@ onMounted(loadSpots)
         <div class="form-grid">
           <el-form-item label="景点编号"><el-input v-model="form.external_id" /></el-form-item>
           <el-form-item label="所属景区" required><el-input v-model="form.scenic_area" /></el-form-item>
-          <el-form-item label="分类" required><el-select v-model="form.spot_type"><el-option label="景点" value="attraction" /><el-option label="展区" value="area" /><el-option label="服务点" value="service" /></el-select></el-form-item>
+          <el-form-item label="分类" required><el-select v-model="form.spot_type"><el-option label="景点" value="attraction" /><el-option label="游览区域" value="area" /><el-option label="服务设施" value="service" /></el-select></el-form-item>
           <el-form-item label="名称" required><el-input v-model="form.name" /></el-form-item>
         </div>
         <el-form-item label="一句话简介" required><el-input v-model="form.summary" type="textarea" :rows="2" /></el-form-item>
@@ -144,17 +148,17 @@ onMounted(loadSpots)
         <el-form-item label="建筑与景观"><el-input v-model="form.landscape_parameters" type="textarea" :rows="2" /></el-form-item>
         <el-form-item label="文化内涵"><el-input v-model="form.cultural_context" type="textarea" :rows="3" /></el-form-item>
         <el-form-item label="游玩亮点"><el-input v-model="form.highlights" type="textarea" :rows="3" /></el-form-item>
-        <div class="form-section-title"><span>03</span><div><h3>运营配置</h3><p>配置开放信息、路线权重和展示状态。</p></div></div>
+        <div class="form-section-title"><span>03</span><div><h3>游览与展示</h3><p>设置开放安排、推荐顺序和游客端展示状态。</p></div></div>
         <div class="form-grid">
           <el-form-item label="位置"><el-input v-model="form.location" /></el-form-item>
-          <el-form-item label="推荐停留分钟"><el-input-number v-model="form.recommended_duration_minutes" :min="5" :max="480" /></el-form-item>
-          <el-form-item label="优先级"><el-input-number v-model="form.priority" :min="0" :max="100" /></el-form-item>
-          <el-form-item label="状态"><el-radio-group v-model="form.status"><el-radio-button value="enabled">启用</el-radio-button><el-radio-button value="disabled">停用</el-radio-button></el-radio-group></el-form-item>
+          <el-form-item label="建议游览时长（分钟）"><el-input-number v-model="form.recommended_duration_minutes" :min="5" :max="480" /></el-form-item>
+          <el-form-item label="路线推荐顺序"><el-input-number v-model="form.priority" :min="0" :max="100" /></el-form-item>
+          <el-form-item label="游客端展示"><el-radio-group v-model="form.status"><el-radio-button value="enabled">展示</el-radio-button><el-radio-button value="disabled">隐藏</el-radio-button></el-radio-group></el-form-item>
         </div>
         <el-form-item label="开放时间与活动"><el-input v-model="form.opening_hours" type="textarea" :rows="2" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.notes" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item label="封面图地址"><el-input v-model="form.cover_image_url" /></el-form-item>
-        <el-form-item label="标签"><el-input v-model="form.tagsText" placeholder="用逗号分隔" /></el-form-item>
+        <el-form-item label="封面图片地址"><el-input v-model="form.cover_image_url" /></el-form-item>
+        <el-form-item label="兴趣标签"><el-input v-model="form.tagsText" placeholder="用逗号分隔" /></el-form-item>
       </el-form>
       <template #footer><div class="drawer-footer"><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveSpot">保存景点</el-button></div></template>
     </el-drawer>

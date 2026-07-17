@@ -66,24 +66,24 @@ const guideCards = computed(() => {
   if (!current || !previous) return []
   const rows: Array<{ label: string; value: string | number; note: string; alert?: boolean }> = [
     { label: '服务游客', value: current.service_visitors, note: delta(current.service_visitors, previous.service_visitors) },
-    { label: '导览会话', value: current.session_count, note: delta(current.session_count, previous.session_count) },
+    { label: '讲解次数', value: current.session_count, note: delta(current.session_count, previous.session_count) },
     { label: '游客提问', value: current.question_count, note: delta(current.question_count, previous.question_count) },
     { label: '回答成功率', value: percent(current.answer_success_rate), note: `上期 ${percent(previous.answer_success_rate)}` },
     { label: '平均响应', value: current.average_answer_duration_ms == null ? '暂无' : `${(current.average_answer_duration_ms / 1000).toFixed(1)}s`, note: '从提问到回答完成' },
     { label: '游客满意度', value: current.average_rating == null ? '暂无' : `${current.average_rating.toFixed(1)} / 5`, note: '来自游客主动评价' },
     { label: '负向反馈率', value: percent(current.negative_rate), note: `上期 ${percent(previous.negative_rate)}`, alert: current.negative_rate >= 0.2 },
-    { label: '分析覆盖率', value: percent(current.analysis_coverage_rate), note: `${current.analysis_failed_count} 条待处理`, alert: current.analysis_failed_count > 0 },
+    { label: '反馈整理进度', value: percent(current.analysis_coverage_rate), note: `${current.analysis_failed_count} 条待处理`, alert: current.analysis_failed_count > 0 },
   ]
   return rows
 })
 
 const serviceTrendOption = computed(() => ({
   ...chartBase,
-  legend: { data: ['会话数', '游客数'], bottom: 0 },
+  legend: { data: ['讲解次数', '游客数'], bottom: 0 },
   xAxis: { type: 'category', data: guideDashboard.value?.service_trend.map((item) => item.date) || [] },
   yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#EDF1EF' } } },
   series: [
-    { name: '会话数', type: 'line', smooth: true, data: guideDashboard.value?.service_trend.map((item) => item.sessions) || [], lineStyle: { color: '#1F6D63', width: 3 }, itemStyle: { color: '#1F6D63' } },
+    { name: '讲解次数', type: 'line', smooth: true, data: guideDashboard.value?.service_trend.map((item) => item.sessions) || [], lineStyle: { color: '#1F6D63', width: 3 }, itemStyle: { color: '#1F6D63' } },
     { name: '游客数', type: 'line', smooth: true, data: guideDashboard.value?.service_trend.map((item) => item.visitors) || [], lineStyle: { color: '#B8892D', width: 3 }, itemStyle: { color: '#B8892D' } },
   ],
 }))
@@ -154,7 +154,7 @@ onMounted(initialize)
 </script>
 
 <template>
-  <AppLayout title="游客感受度大屏" description="从服务规模、回答质量、游客情绪和主动评价观察数字导览体验。" role-label="运营管理">
+  <AppLayout title="运营概览" description="查看讲解使用、游客感受、路线热度和景点表现。" role-label="景区运营">
     <template #actions><el-button :icon="Refresh" :loading="loading" @click="loadAnalytics">刷新</el-button></template>
 
     <section class="analytics-filter-bar">
@@ -162,7 +162,7 @@ onMounted(initialize)
         <el-option v-for="area in scenicAreas" :key="area.id" :label="area.name" :value="area.id" />
       </el-select>
       <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" :shortcuts="dateShortcuts" :clearable="false" @change="loadAnalytics" />
-      <el-button type="primary" plain @click="openInsights">查看报告与风险事项</el-button>
+      <el-button type="primary" plain @click="openInsights">服务报告与待办</el-button>
     </section>
 
     <section v-loading="loading" class="analytics-grid guide-metric-grid">
@@ -172,9 +172,9 @@ onMounted(initialize)
     </section>
 
     <section class="analytics-section">
-      <div class="data-section-header"><div><span>数字导览趋势</span><h2>服务量与游客感受</h2><p>情绪由模型按固定标签分析，满意度来自游客主动提交的 1–5 分评价。</p></div></div>
+      <div class="data-section-header"><div><span>讲解服务</span><h2>使用情况与游客感受</h2><p>结合游客提问、讲解完成情况和主动评价，了解服务表现。</p></div></div>
       <div class="chart-grid">
-        <article class="chart-panel"><h3>服务量趋势</h3><InsightChart :option="serviceTrendOption" :empty="!guideDashboard?.service_trend.length" empty-text="该时段暂无导览会话" summary="按日期展示会话数和独立游客数" /></article>
+        <article class="chart-panel"><h3>服务量趋势</h3><InsightChart :option="serviceTrendOption" :empty="!guideDashboard?.service_trend.length" empty-text="该时段暂无讲解记录" summary="按日期展示讲解次数和服务游客数" /></article>
         <article class="chart-panel"><h3>情绪趋势</h3><InsightChart :option="sentimentOption" :empty="!guideDashboard?.sentiment_trend.length" empty-text="完成互动分析后显示情绪趋势" summary="按日期堆叠展示正向、中性和负向互动" /></article>
         <article class="chart-panel"><h3>咨询主题分布</h3><InsightChart :option="topicOption" :empty="!guideDashboard?.topic_distribution.length" empty-text="暂无主题分析数据" summary="展示游客最常咨询的主题" /></article>
         <article class="chart-panel"><h3>满意度趋势</h3><InsightChart :option="satisfactionOption" :empty="!guideDashboard?.satisfaction_trend.length" empty-text="游客提交评价后显示趋势" summary="按日期展示游客平均满意度" /></article>
@@ -182,12 +182,12 @@ onMounted(initialize)
     </section>
 
     <section class="analytics-table-grid">
-      <article class="analytics-table-panel"><div class="data-section-header compact"><div><span>高频诉求</span><h2>热门问题</h2></div></div><el-table :data="guideDashboard?.popular_questions || []" empty-text="暂无热门问题"><el-table-column type="index" width="56" label="#" /><el-table-column prop="name" label="归一化问题" /><el-table-column prop="count" label="次数" width="90" /></el-table></article>
+      <article class="analytics-table-panel"><div class="data-section-header compact"><div><span>高频咨询</span><h2>游客常问</h2></div></div><el-table :data="guideDashboard?.popular_questions || []" empty-text="暂无热门问题"><el-table-column type="index" width="56" label="#" /><el-table-column prop="name" label="问题" /><el-table-column prop="count" label="咨询次数" width="100" /></el-table></article>
       <article class="analytics-table-panel"><div class="data-section-header compact"><div><span>服务风险</span><h2>待关注事项</h2></div><el-button text type="primary" @click="openInsights">查看全部</el-button></div><el-table :data="guideDashboard?.attention_preview || []" empty-text="暂无待关注事项"><el-table-column prop="normalized_question" label="问题" /><el-table-column prop="issue_type" label="类型" width="120" /><el-table-column prop="sentiment" label="情绪" width="80" /></el-table></article>
     </section>
 
     <section class="analytics-section secondary-analytics">
-      <div class="data-section-header"><div><span>全局运营概览</span><h2>路线与景点使用情况</h2><p v-if="overview">共生成 {{ overview.route_count }} 条路线，记录 {{ overview.behavior_record_count }} 次游览行为。</p></div></div>
+      <div class="data-section-header"><div><span>行程使用</span><h2>路线与景点热度</h2><p v-if="overview">共规划 {{ overview.route_count }} 条路线，记录 {{ overview.behavior_record_count }} 次游览行为。</p></div></div>
       <div class="chart-grid">
         <article class="chart-panel"><h3>路线生成趋势</h3><InsightChart :option="routeTrendOption" :empty="!routeAnalytics?.daily_routes.length" empty-text="生成路线后显示趋势" summary="按日期展示路线生成次数" /></article>
         <article class="chart-panel"><h3>热门推荐景点</h3><InsightChart :option="spotOption" :empty="!spotAnalytics?.route_popular_spots.some((item) => item.selected_count > 0)" empty-text="暂无景点推荐数据" summary="展示路线中入选次数最多的景点" /></article>

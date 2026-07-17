@@ -119,7 +119,7 @@ async function loadData() {
     if (!selectedScenicAreaId.value) selectedScenicAreaId.value = scenicAreas.value[0]?.id
     await loadScenicAvatars()
   } catch (error) {
-    ElMessage.error(errorText(error, '数字人配置加载失败'))
+    ElMessage.error(errorText(error, '讲解员配置加载失败'))
   } finally {
     loading.value = false
   }
@@ -163,9 +163,9 @@ async function saveProviderSettings() {
     })
     ttsProviders.value = (await avatarApi.listTtsProviders()).data
     providerDialogVisible.value = false
-    ElMessage.success('语音模型参数已保存')
+    ElMessage.success('语音服务设置已保存')
   } catch (error) {
-    ElMessage.error(errorText(error, '语音模型参数保存失败'))
+    ElMessage.error(errorText(error, '语音服务设置保存失败'))
   }
 }
 
@@ -179,11 +179,11 @@ async function testProvider(provider: TtsProviderSetting) {
       ttsProviderTestUrl(provider.provider),
       authStore.token || '',
       async () => authStore.token || '',
-      { text: '欢迎来到灵山胜境，我是您的数字讲解员。', voice: provider.default_voice },
+      { text: '欢迎来到灵山胜境，我是您的景区讲解员。', voice: provider.default_voice },
     )
     ElMessage.success(
       testingFirstAudioMs.value
-        ? `${provider.display_name}首段语音 ${testingFirstAudioMs.value} ms 返回`
+        ? `${provider.display_name}在 ${testingFirstAudioMs.value} ms 后开始播放`
         : `${provider.display_name}试听完成`,
     )
   } catch (error) {
@@ -203,7 +203,7 @@ async function loadScenicAvatars() {
 
 async function saveHuman() {
   if (!humanForm.name.trim() || !humanForm.role_title.trim() || !humanForm.tts_voice) {
-    ElMessage.warning('请填写名称、角色定位和系统音色')
+    ElMessage.warning('请填写名称、角色定位和讲解音色')
     return
   }
   const payload = {
@@ -223,9 +223,9 @@ async function saveHuman() {
     }
     humanDialogVisible.value = false
     await loadData()
-    ElMessage.success('数字人资料已保存')
+    ElMessage.success('讲解员资料已保存')
   } catch (error) {
-    ElMessage.error(errorText(error, '数字人资料保存失败'))
+    ElMessage.error(errorText(error, '讲解员资料保存失败'))
   }
 }
 
@@ -236,7 +236,7 @@ function onFileChange(event: Event) {
 
 async function uploadVariant() {
   if (!selectedScenicAreaId.value || !variantForm.digitalHumanId || !variantForm.outfitName.trim() || !selectedFile.value) {
-    ElMessage.warning('请选择人物、填写服装名称并上传 VRM 文件')
+    ElMessage.warning('请选择讲解员、填写外观名称并上传 3D 形象文件')
     return
   }
   try {
@@ -253,9 +253,9 @@ async function uploadVariant() {
     })
     variantDialogVisible.value = false
     await loadData()
-    ElMessage.success('VRM 外观已上传并加入当前景区')
+    ElMessage.success('讲解员外观已上传并加入当前景区')
   } catch (error) {
-    ElMessage.error(errorText(error, 'VRM 上传失败'))
+    ElMessage.error(errorText(error, '讲解员外观上传失败'))
   }
 }
 
@@ -273,18 +273,18 @@ async function toggleHuman(human: DigitalHuman) {
     await avatarApi.updateHuman(human.id, { is_enabled: !human.is_enabled })
     await loadData()
   } catch (error) {
-    ElMessage.error(errorText(error, '人物状态更新失败'))
+    ElMessage.error(errorText(error, '讲解员状态更新失败'))
   }
 }
 
 async function removeHuman(human: DigitalHuman) {
   try {
-    await ElMessageBox.confirm(`将删除“${human.name}”及其所有外观文件，此操作不可恢复。`, '删除数字人', { type: 'warning' })
+    await ElMessageBox.confirm(`将删除“${human.name}”及其所有外观文件，此操作不可恢复。`, '删除讲解员', { type: 'warning' })
     await avatarApi.deleteHuman(human.id)
     await loadData()
-    ElMessage.success('数字人已删除')
+    ElMessage.success('讲解员已删除')
   } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error(errorText(error, '数字人删除失败'))
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(errorText(error, '讲解员删除失败'))
   }
 }
 
@@ -319,41 +319,41 @@ onBeforeUnmount(() => void providerTestPlayer.destroy())
 </script>
 
 <template>
-  <AppLayout title="数字人管理" description="维护讲解员形象、声音和景区启用配置。" role-label="运营管理">
+  <AppLayout title="讲解员" description="维护讲解员形象、声音和服务景区。" role-label="景区运营">
     <section v-loading="loading" class="avatar-management-page">
       <header class="avatar-management-hero">
         <div>
-          <p class="eyebrow">LINGSHAN AVATAR STUDIO</p>
-          <h2>让每一位讲解员，都有自己的文化气质。</h2>
-          <p>人物负责声音与讲解风格，外观版本负责服装与 VRM 模型；仅上架版本会出现在游客端。</p>
+          <p class="eyebrow">景区讲解员</p>
+          <h2>为不同景区安排合适的讲解员。</h2>
+          <p>设置讲解员的声音、介绍和外观。只有已上架的外观会展示给游客。</p>
         </div>
         <div class="avatar-hero-actions">
-          <el-button :icon="User" @click="openHumanDialog()">新建人物</el-button>
-          <el-button type="primary" :icon="UploadFilled" :disabled="!selectedScenicAreaId || !humans.length" @click="openVariantDialog">上传 VRM 外观</el-button>
+          <el-button :icon="User" @click="openHumanDialog()">新建讲解员</el-button>
+          <el-button type="primary" :icon="UploadFilled" :disabled="!selectedScenicAreaId || !humans.length" @click="openVariantDialog">上传讲解员外观</el-button>
         </div>
       </header>
 
       <section class="tts-provider-section">
         <div class="avatar-section-heading">
-          <div><p class="eyebrow">VOICE DELIVERY</p><h3>实时语音服务</h3></div>
-          <small>默认服务负责日常播报；首包失败时才尝试备用服务，不会在一句话中途换声。</small>
+          <div><p class="eyebrow">语音服务</p><h3>讲解语音</h3></div>
+          <small>选择日常使用和备用的语音服务。默认服务暂时不可用时，系统会在开始播放前尝试备用服务。</small>
         </div>
         <div class="tts-provider-grid">
           <article v-for="provider in ttsProviders" :key="provider.provider" class="tts-provider-card" :class="{ primary: provider.is_default, unavailable: !provider.configured }">
             <header>
               <div><span class="tts-provider-dot" /><div><h4>{{ provider.display_name }}</h4><p>{{ provider.model }}</p></div></div>
-              <el-tag :type="provider.configured ? 'success' : 'danger'" effect="plain">{{ provider.configured ? '密钥已配置' : '缺少密钥' }}</el-tag>
+              <el-tag :type="provider.configured ? 'success' : 'danger'" effect="plain">{{ provider.configured ? '可用' : '未完成配置' }}</el-tag>
             </header>
             <div class="tts-provider-metrics">
-              <span><small>首包时限</small><strong>{{ provider.first_chunk_timeout_ms }} ms</strong></span>
+              <span><small>开始播放等待</small><strong>{{ provider.first_chunk_timeout_ms }} ms</strong></span>
               <span><small>默认音色</small><strong>{{ provider.default_voice }}</strong></span>
             </div>
             <footer>
               <el-switch :model-value="provider.is_enabled" :disabled="provider.is_default || provider.is_fallback" active-text="启用" @change="updateProvider(provider, { is_enabled: Boolean($event) })" />
               <el-button v-if="!provider.is_default" text @click="updateProvider(provider, { is_default: true })">设为默认</el-button>
               <el-button v-if="!provider.is_fallback" text @click="updateProvider(provider, { is_fallback: true })">设为备用</el-button>
-              <el-button text @click="openProviderDialog(provider)">参数</el-button>
-              <el-button type="primary" plain :loading="testingProvider === provider.provider" :disabled="!provider.configured" @click="testProvider(provider)">试听测速</el-button>
+              <el-button text @click="openProviderDialog(provider)">设置</el-button>
+              <el-button type="primary" plain :loading="testingProvider === provider.provider" :disabled="!provider.configured" @click="testProvider(provider)">试听</el-button>
             </footer>
           </article>
         </div>
@@ -401,16 +401,16 @@ onBeforeUnmount(() => void providerTestPlayer.destroy())
             </div>
           </article>
         </div>
-        <el-empty v-else description="当前景区暂无数字人形象"><el-button type="primary" @click="openVariantDialog">添加形象</el-button></el-empty>
+        <el-empty v-else description="当前景区暂无讲解员形象"><el-button type="primary" @click="openVariantDialog">添加形象</el-button></el-empty>
       </section>
 
       <section class="avatar-people-section">
-        <div class="avatar-section-heading"><div><p class="eyebrow">GUIDE IDENTITIES</p><h3>人物与声音档案</h3></div><small>停用人物后，其所有上架外观都会从游客端隐藏。</small></div>
+        <div class="avatar-section-heading"><div><p class="eyebrow">讲解员档案</p><h3>讲解员与声音</h3></div><small>停用讲解员后，其所有上架外观都会从游客端隐藏。</small></div>
         <div class="avatar-people-grid">
           <article v-for="human in humans" :key="human.id" class="avatar-person-card" :class="{ disabled: !human.is_enabled }">
             <span class="avatar-person-mark">{{ human.name.slice(-1) }}</span>
-            <div class="avatar-person-main"><p>{{ human.gender === 'female' ? '女性讲解员' : human.gender === 'male' ? '男性讲解员' : '数字讲解员' }}</p><h4>{{ human.name }}</h4><strong>{{ human.role_title }}</strong></div>
-            <p>{{ human.introduction || '暂未填写人物介绍。' }}</p>
+            <div class="avatar-person-main"><p>{{ human.gender === 'female' ? '女性讲解员' : human.gender === 'male' ? '男性讲解员' : '景区讲解员' }}</p><h4>{{ human.name }}</h4><strong>{{ human.role_title }}</strong></div>
+            <p>{{ human.introduction || '暂未填写讲解员介绍。' }}</p>
             <div class="avatar-person-voice"><Microphone /><span>{{ human.tts_provider === 'volcengine' ? '火山引擎' : '千问' }} · {{ human.tts_voice }}</span><small>{{ human.tts_instructions || '采用默认景区讲解语气' }}</small></div>
             <footer><el-switch :model-value="human.is_enabled" active-text="启用" inactive-text="停用" @change="toggleHuman(human)" /><span /><el-button text :icon="EditPen" @click="openHumanDialog(human)">编辑</el-button><el-button text type="danger" :icon="Delete" @click="removeHuman(human)">删除</el-button></footer>
           </article>
@@ -418,32 +418,32 @@ onBeforeUnmount(() => void providerTestPlayer.destroy())
       </section>
     </section>
 
-    <el-dialog v-model="humanDialogVisible" :title="editingHumanId ? '编辑数字人资料' : '新建数字人'" width="620px" destroy-on-close>
+    <el-dialog v-model="humanDialogVisible" :title="editingHumanId ? '编辑讲解员资料' : '新建讲解员'" width="620px" destroy-on-close>
       <el-form label-position="top" class="avatar-form">
         <div class="avatar-form-two-column"><el-form-item label="中文名字"><el-input v-model="humanForm.name" placeholder="例如：沈清莲" /></el-form-item><el-form-item label="性别"><el-select v-model="humanForm.gender"><el-option label="女性" value="female" /><el-option label="男性" value="male" /><el-option label="未指定" value="unspecified" /></el-select></el-form-item></div>
         <el-form-item label="角色定位"><el-input v-model="humanForm.role_title" placeholder="例如：灵山文化讲解员" /></el-form-item>
-        <el-form-item label="人物介绍"><el-input v-model="humanForm.introduction" type="textarea" :rows="2" /></el-form-item>
-        <div class="avatar-form-two-column"><el-form-item label="语音服务"><el-select v-model="humanForm.tts_provider" @change="onHumanProviderChange"><el-option v-for="provider in ttsProviders.filter((item) => item.is_enabled)" :key="provider.provider" :label="provider.display_name" :value="provider.provider" /></el-select></el-form-item><el-form-item label="系统音色"><el-select v-model="humanForm.tts_voice"><el-option v-for="voice in voices" :key="voice.value" :label="voice.label" :value="voice.value" /></el-select></el-form-item></div>
-        <el-form-item v-if="editingHumanId" label="人物状态"><el-switch v-model="humanForm.is_enabled" active-text="启用" inactive-text="停用" /></el-form-item>
-        <el-form-item label="讲解风格指令"><el-input v-model="humanForm.tts_instructions" type="textarea" :rows="3" placeholder="例如：语速适中，温和、清晰地介绍灵山文化。" /></el-form-item>
+        <el-form-item label="讲解员介绍"><el-input v-model="humanForm.introduction" type="textarea" :rows="2" /></el-form-item>
+        <div class="avatar-form-two-column"><el-form-item label="语音服务"><el-select v-model="humanForm.tts_provider" @change="onHumanProviderChange"><el-option v-for="provider in ttsProviders.filter((item) => item.is_enabled)" :key="provider.provider" :label="provider.display_name" :value="provider.provider" /></el-select></el-form-item><el-form-item label="讲解音色"><el-select v-model="humanForm.tts_voice"><el-option v-for="voice in voices" :key="voice.value" :label="voice.label" :value="voice.value" /></el-select></el-form-item></div>
+        <el-form-item v-if="editingHumanId" label="讲解员状态"><el-switch v-model="humanForm.is_enabled" active-text="启用" inactive-text="停用" /></el-form-item>
+        <el-form-item label="讲解语气"><el-input v-model="humanForm.tts_instructions" type="textarea" :rows="3" placeholder="例如：语速适中，温和、清晰地介绍灵山文化。" /></el-form-item>
       </el-form>
-      <template #footer><el-button @click="humanDialogVisible = false">取消</el-button><el-button type="primary" @click="saveHuman">保存人物</el-button></template>
+      <template #footer><el-button @click="humanDialogVisible = false">取消</el-button><el-button type="primary" @click="saveHuman">保存讲解员</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="providerDialogVisible" :title="`${providerForm.displayName}参数`" width="560px" destroy-on-close>
+    <el-dialog v-model="providerDialogVisible" :title="`${providerForm.displayName}设置`" width="560px" destroy-on-close>
       <el-form label-position="top" class="avatar-form">
-        <el-form-item label="模型 / 资源 ID"><el-input v-model="providerForm.model" /></el-form-item>
+        <el-form-item label="服务资源"><el-input v-model="providerForm.model" /></el-form-item>
         <el-form-item label="默认音色"><el-select v-model="providerForm.defaultVoice"><el-option v-for="voice in voices" :key="voice.value" :label="voice.label" :value="voice.value" /></el-select></el-form-item>
-        <el-form-item label="首包超时阈值"><el-input-number v-model="providerForm.firstChunkTimeoutMs" :min="500" :max="10000" :step="100" /><small class="avatar-form-hint">超过此时间且尚未收到任何音频时，系统才会尝试备用服务。</small></el-form-item>
+        <el-form-item label="开始播放等待时间"><el-input-number v-model="providerForm.firstChunkTimeoutMs" :min="500" :max="10000" :step="100" /><small class="avatar-form-hint">超过此时间仍未开始播放时，系统会尝试备用服务。</small></el-form-item>
       </el-form>
-      <template #footer><el-button @click="providerDialogVisible = false">取消</el-button><el-button type="primary" @click="saveProviderSettings">保存参数</el-button></template>
+      <template #footer><el-button @click="providerDialogVisible = false">取消</el-button><el-button type="primary" @click="saveProviderSettings">保存设置</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="variantDialogVisible" title="上传 VRM 外观版本" width="620px" destroy-on-close>
+    <el-dialog v-model="variantDialogVisible" title="上传讲解员外观" width="620px" destroy-on-close>
       <el-form label-position="top" class="avatar-form">
-        <el-form-item label="归属人物"><el-select v-model="variantForm.digitalHumanId" filterable><el-option v-for="human in humans" :key="human.id" :label="`${human.name} · ${human.role_title}`" :value="human.id" /></el-select></el-form-item>
+        <el-form-item label="归属讲解员"><el-select v-model="variantForm.digitalHumanId" filterable><el-option v-for="human in humans" :key="human.id" :label="`${human.name} · ${human.role_title}`" :value="human.id" /></el-select></el-form-item>
         <div class="avatar-form-two-column"><el-form-item label="服装/外观名称"><el-input v-model="variantForm.outfitName" placeholder="例如：浅青新中式" /></el-form-item><el-form-item label="版本"><el-input v-model="variantForm.version" /></el-form-item></div>
-        <el-form-item label="VRM 文件（最大 80MB）"><input ref="uploadInput" class="avatar-file-input" type="file" accept=".vrm,model/gltf-binary" @change="onFileChange" /><small v-if="selectedFile">已选择：{{ selectedFile.name }}（{{ formatBytes(selectedFile.size) }}）</small></el-form-item>
+        <el-form-item label="3D 形象文件（VRM，最大 80MB）"><input ref="uploadInput" class="avatar-file-input" type="file" accept=".vrm,model/gltf-binary" @change="onFileChange" /><small v-if="selectedFile">已选择：{{ selectedFile.name }}（{{ formatBytes(selectedFile.size) }}）</small></el-form-item>
         <el-form-item label="缩略图地址（可选）"><el-input v-model="variantForm.thumbnailUrl" placeholder="可填写图片 URL，未填写时显示人物字标" /></el-form-item>
         <div class="avatar-form-inline"><el-switch v-model="variantForm.isEnabled" active-text="上传后立即上架" inactive-text="保存为下架" /><el-switch v-model="variantForm.isDefault" :disabled="!variantForm.isEnabled" active-text="设为默认" /><el-form-item label="排序"><el-input-number v-model="variantForm.sortOrder" :min="-1000" :max="1000" /></el-form-item></div>
       </el-form>

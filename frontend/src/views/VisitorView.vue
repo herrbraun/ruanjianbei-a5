@@ -174,7 +174,7 @@ async function loadScenicAvatars() {
       ? storedId
       : data.default_variant_id || data.avatars[0]?.id
   } catch (error) {
-    avatarRenderError.value = errorText(error, '数字人列表暂时不可用，仍可继续文字与语音讲解')
+    avatarRenderError.value = errorText(error, '讲解员形象暂时不可用，仍可继续文字与语音讲解')
   } finally {
     avatarListLoading.value = false
   }
@@ -196,7 +196,7 @@ async function openGuideSession(routePlanId?: number, currentSpotId?: number) {
     await guideStore.openScenicArea(selectedScenicCode.value, routePlanId, currentSpotId)
     await scrollToLatest()
   } catch (error) {
-    ElMessage.error(errorText(error, '无法打开该景区的导览会话'))
+    ElMessage.error(errorText(error, '暂时无法开始该景区的讲解'))
   }
 }
 
@@ -280,7 +280,7 @@ async function initializeGuidePage() {
       await sendRouteIntroduction(currentSpotId)
     }
   } catch (error) {
-    ElMessage.error(errorText(error, '无法从这条路线开始数字人导览'))
+    ElMessage.error(errorText(error, '暂时无法从这条路线开始讲解'))
   }
 }
 
@@ -509,11 +509,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AppLayout title="智能导览" description="选择景区，与数字讲解员开始对话。" role-label="游览服务">
+  <AppLayout title="随身讲解" description="听景点故事，随时询问游览中的问题。" role-label="景区导览">
     <section class="guide-page" v-loading="loadingAreas">
       <article v-if="!guideStarted" class="guide-launch-card">
-        <p class="eyebrow">选择景区</p>
-        <h2>先选一座景区</h2>
+        <p class="eyebrow">选择目的地</p>
+        <h2>想听哪里的讲解？</h2>
         <p>从景区文化、路线安排到演出时间，让讲解员陪你慢慢逛。</p>
         <el-select v-model="selectedScenicCode" class="guide-area-select" placeholder="请选择景区" :disabled="loadingAreas">
           <el-option v-for="area in scenicAreas" :key="area.code" :label="area.name" :value="area.code" />
@@ -522,7 +522,7 @@ onBeforeUnmount(() => {
           <Compass />
           <div>
             <strong>{{ selectedScenicArea.name }}</strong>
-            <span>{{ selectedScenicArea.description || '已进入数字导览上下文' }}</span>
+            <span>{{ selectedScenicArea.description || '景点讲解和游览问答已准备好' }}</span>
           </div>
         </div>
         <el-button class="guide-start-button" type="primary" size="large" :disabled="!selectedScenicCode || loadingAreas" @click="startGuide">
@@ -533,18 +533,18 @@ onBeforeUnmount(() => {
       <article v-else class="guide-conversation-card" :class="{ 'has-route-context': activeRouteContext }">
         <header class="guide-conversation-heading">
           <div>
-            <p class="eyebrow">ASK · LISTEN · EXPLORE</p>
+            <p class="eyebrow">边走边听 · 随时提问</p>
             <h2>{{ selectedScenicArea?.name || '景区导览' }}</h2>
           </div>
           <div class="guide-conversation-tools">
             <el-button text :disabled="routeControlsBusy || guideStore.loadingMessages" @click="returnToScenicSelection">切换景区</el-button>
-            <span class="guide-session-status" :class="{ ready: sessionReady }"><i />{{ sessionReady ? '导览已就绪' : '正在连接' }}</span>
+            <span class="guide-session-status" :class="{ ready: sessionReady }"><i />{{ sessionReady ? '可以开始提问' : '正在准备讲解' }}</span>
           </div>
         </header>
 
         <section v-if="activeRouteContext && currentRouteSpot" class="guide-route-progress" aria-label="当前个性化行程">
           <div class="guide-route-progress-main">
-            <span>个性化行程 · {{ activeRouteContext.interest }}</span>
+            <span>我的行程 · {{ activeRouteContext.interest }}</span>
             <strong>第 {{ currentRouteSpot.sequence }} / {{ activeRouteContext.total_spots }} 站 · {{ currentRouteSpot.name }}</strong>
             <p>{{ currentRouteSpot.reason }}</p>
           </div>
@@ -566,15 +566,15 @@ onBeforeUnmount(() => {
                   <el-option v-for="avatar in scenicAvatars" :key="avatar.id" :label="`${avatar.name} · ${avatar.outfit_name}`" :value="avatar.id" />
                 </el-select>
               </div>
-              <span v-else-if="!avatarListLoading" class="guide-avatar-empty">当前可使用文字与语音导览。</span>
+              <span v-else-if="!avatarListLoading" class="guide-avatar-empty">可以使用文字或语音听讲解。</span>
             </div>
             <div class="guide-assistant-presence">
               <div class="guide-avatar-canvas guide-assistant-avatar" :class="`is-${avatarMotion}`">
                 <AvatarViewer :asset-url="avatarAsset" :state="avatarMotion" :audio-level="audioLevel" :welcome-request="avatarWelcomeRequest" @error="onAvatarRenderError">
                   <div class="guide-avatar-fallback">
                     <span>{{ activeAvatar?.name?.slice(-1) || '灵' }}</span>
-                    <strong>{{ activeAvatar?.name || '数字讲解员' }}</strong>
-                    <small>文字与语音导览始终可用</small>
+                    <strong>{{ activeAvatar?.name || '景区讲解员' }}</strong>
+                    <small>支持文字与语音讲解</small>
                   </div>
                 </AvatarViewer>
                 <span class="guide-avatar-state"><i />{{ avatarMotion === 'speaking' ? '正在讲解' : avatarMotion === 'thinking' ? '正在思考' : avatarMotion === 'guiding' ? '正在指引' : avatarMotion === 'welcome' ? '正在问候' : avatarMotion === 'listening' ? '正在聆听' : '随时为您服务' }}</span>
@@ -582,21 +582,21 @@ onBeforeUnmount(() => {
               <div class="guide-welcome-bubble">
                 <span>{{ activeAvatar?.name || '景区讲解员' }}</span>
                 <strong>{{ currentRouteSpot ? `路线第 ${currentRouteSpot.sequence} 站：${currentRouteSpot.name}` : `欢迎来到${selectedScenicArea?.name || '景区'}！` }}</strong>
-                <p>{{ currentRouteSpot ? `我会按“${activeRouteContext?.interest}”偏好调整讲解重点，并陪你走完这条路线。` : '我是你的数字讲解员。想了解景点故事、游览路线，还是今天的演出安排？' }}</p>
+                <p>{{ currentRouteSpot ? `我会按“${activeRouteContext?.interest}”偏好介绍沿途景点，并陪你走完这条路线。` : '想了解景点故事、游览路线，还是今天的演出安排？直接问我吧。' }}</p>
               </div>
             </div>
             <p v-if="avatarRenderError" class="guide-avatar-error">{{ avatarRenderError }}</p>
           </section>
 
-          <div v-if="guideStore.loadingMessages" class="guide-empty-state"><el-icon class="is-loading"><Loading /></el-icon>正在恢复导览会话…</div>
+          <div v-if="guideStore.loadingMessages" class="guide-empty-state"><el-icon class="is-loading"><Loading /></el-icon>正在准备之前的讲解内容…</div>
           <p v-else-if="!messages.length" class="guide-question-nudge">试着问问“这里有哪些必看的景点？”也可以按下麦克风直接说出来。</p>
 
           <article v-for="message in messages" :key="message.id" class="guide-message" :class="`is-${message.role}`">
             <div class="guide-message-avatar">{{ message.role === 'user' ? '游' : '导' }}</div>
             <div class="guide-message-body">
               <div class="guide-message-meta">
-                <strong>{{ message.role === 'user' ? '游客提问' : '智能讲解' }}</strong>
-                <span v-if="message.input_mode === 'voice'">语音识别</span>
+                <strong>{{ message.role === 'user' ? '我的问题' : '讲解员' }}</strong>
+                <span v-if="message.input_mode === 'voice'">语音输入</span>
                 <time>{{ formatTime(message.created_at) }}</time>
               </div>
               <div class="guide-message-content" :class="{ failed: message.status === 'failed' }">{{ displayMessageContent(message.content) }}</div>
@@ -608,7 +608,7 @@ onBeforeUnmount(() => {
                   </el-button>
                 </div>
                 <details v-if="message.sources?.length" class="guide-sources">
-                  <summary><Document /> 查看更多相关资料</summary>
+                  <summary><Document /> 查看参考内容</summary>
                   <div class="guide-source-list">
                     <article v-for="source in message.sources" :key="source.chunk_id" class="guide-source-card">
                       <div><strong>{{ sourceTitle(source) }}</strong></div>
@@ -639,7 +639,7 @@ onBeforeUnmount(() => {
         <footer class="guide-composer">
           <div class="guide-composer-mode" :class="{ voice: draftInputMode === 'voice' }">
             <Microphone v-if="draftInputMode === 'voice'" />
-            <span>{{ draftInputMode === 'voice' ? '来自语音识别，可编辑后发送' : '文字提问' }}</span>
+            <span>{{ draftInputMode === 'voice' ? '已转成文字，可修改后发送' : '文字提问' }}</span>
           </div>
           <el-input v-model="draft" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" :disabled="!sessionReady || guideStore.sending" placeholder="例如：九龙灌浴几点表演？" @keydown.enter.exact.prevent="sendQuestion" />
           <div class="guide-composer-actions">
