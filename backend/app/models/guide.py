@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Any, TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func, text
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, Time, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -130,7 +130,9 @@ class ScenicInsightReport(Base):
     __table_args__ = (
         CheckConstraint("period_type IN ('daily', 'weekly')", name="ck_scenic_insight_reports_period_type"),
         CheckConstraint("generation_status IN ('pending', 'processing', 'completed', 'failed')", name="ck_scenic_insight_reports_generation_status"),
+        CheckConstraint("trigger_source IN ('manual', 'scheduled')", name="ck_scenic_insight_reports_trigger_source"),
         Index("ix_scenic_insight_reports_scenic_period", "scenic_area_id", "period_start", "period_end"),
+        UniqueConstraint("deduplication_key", name="uq_scenic_insight_reports_deduplication_key"),
     )
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     scenic_area_id: Mapped[int] = mapped_column(ForeignKey("scenic_areas.id", ondelete="CASCADE"), nullable=False)
@@ -145,6 +147,32 @@ class ScenicInsightReport(Base):
     generation_status: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'pending'"))
     generation_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trigger_source: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'manual'"))
+    deduplication_key: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    generation_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    processing_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class InsightReportSchedule(Base):
+    __tablename__ = "insight_report_schedules"
+    __table_args__ = (
+        UniqueConstraint("scenic_area_id", name="uq_insight_report_schedules_scenic_area"),
+        CheckConstraint("weekly_weekday BETWEEN 0 AND 6", name="ck_insight_report_schedules_weekday"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scenic_area_id: Mapped[int] = mapped_column(ForeignKey("scenic_areas.id", ondelete="CASCADE"), nullable=False)
+    daily_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    daily_run_time: Mapped[time] = mapped_column(Time, nullable=False, server_default=text("'00:10:00'"))
+    weekly_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    weekly_weekday: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    weekly_run_time: Mapped[time] = mapped_column(Time, nullable=False, server_default=text("'00:20:00'"))
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, server_default=text("'Asia/Shanghai'"))
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )

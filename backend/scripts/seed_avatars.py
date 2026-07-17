@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
+import json
 from pathlib import Path
 import sys
 
@@ -17,88 +19,123 @@ from app.models.avatar import AvatarVariant, DigitalHuman, ScenicAvatarConfig
 from app.services.avatar_storage import (
     AVATAR_UPLOAD_DIRECTORY,
     content_sha256,
-    save_vrm_upload,
     validate_vrm_upload,
 )
 
 
-SEED_AVATARS = (
-    ("沈清莲", "female", "灵山文化讲解员", "以温和、沉静的文化讲解员语气，清晰介绍灵山历史与佛教艺术。", "Lingshan Cultural Guide.vrm", "浅青新中式"),
-    ("顾听雪", "female", "四季风物讲解员", "以温柔、清爽的语气介绍灵山四季景观与出行建议。", "Lingshan Winter Guide.vrm", "冬日国风"),
-    ("林青岚", "female", "山林生态讲解员", "以亲切、自然的语气介绍山林生态、徒步礼仪与安全提醒。", "Lingshan Forest Guide.vrm", "山林轻装"),
-    ("苏澜", "female", "湖畔休闲讲解员", "以轻松、明快的语气介绍湖畔景致与休闲路线。", "Lingshan Lakeside Guide.vrm", "湖畔休闲装"),
-    ("周知微", "female", "游客服务讲解员", "以专业、耐心的前台服务语气回答游客服务与动线问题。", "Lingshan Reception Guide.vrm", "正式接待装"),
-    ("陆远峰", "male", "山地路线讲解员", "以稳重、可靠的语气介绍登山路线、观景点与安全事项。", "Lingshan Mountain Guide.vrm", "山地风衣"),
-    ("程叙川", "male", "城市文化讲解员", "以友好、简洁的语气介绍城市文化与交通服务。", "Lingshan City Guide.vrm", "城市轻运动装"),
-    ("谢文博", "male", "艺术展馆讲解员", "以文雅、清晰的语气介绍展馆艺术、参观秩序与文化背景。", "Lingshan Gallery Guide.vrm", "展馆简约装"),
-    ("陈乐川", "male", "亲子互动讲解员", "以活泼、耐心的语气面向亲子游客说明互动体验。", "Lingshan Family Guide.vrm", "亲子活力装"),
-    ("顾承文", "male", "遗产文化讲解员", "以庄重、平和的语气讲解文化遗产与参观礼仪。", "Lingshan Heritage Guide.vrm", "遗产正式装"),
-)
+DEFAULT_MANIFEST = AVATAR_UPLOAD_DIRECTORY / "manifest.json"
 
 
-def find_existing_upload(content: bytes) -> str | None:
-    """Reuse a tracked VRM with identical content instead of duplicating it."""
-    if not AVATAR_UPLOAD_DIRECTORY.exists():
-        return None
-    expected_hash = content_sha256(content)
-    for candidate in AVATAR_UPLOAD_DIRECTORY.glob("*.vrm"):
-        if candidate.stat().st_size != len(content):
-            continue
-        if content_sha256(candidate.read_bytes()) == expected_hash:
-            return candidate.name
-    return None
+@dataclass(frozen=True)
+class SeedAvatar:
+    name: str
+    gender: str
+    role_title: str
+    introduction: str
+    tts_instructions: str
+    outfit_name: str
+    version: str
+    original_filename: str
+    stored_filename: str
+    sha256: str
+    file_size: int
+    is_default: bool
+    sort_order: int
 
 
-def seed(source: Path, scenic_code: str) -> None:
-    db = SessionLocal()
+def load_seed_manifest(manifest_path: Path) -> tuple[str, list[SeedAvatar]]:
     try:
-        scenic_area = get_scenic_area_by_code(db, scenic_code)
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise SystemExit(f"数字人清单不存在：{manifest_path}") from exc
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"数字人清单无法读取：{manifest_path}") from exc
+    if payload.get("schema_version") != 1 or not isinstance(payload.get("avatars"), list):
+        raise SystemExit("数字人清单格式无效")
+    try:
+        avatars = [SeedAvatar(**item) for item in payload["avatars"]]
+    except (TypeError, KeyError) as exc:
+        raise SystemExit("数字人清单缺少必要字段") from exc
+    if not avatars or sum(avatar.is_default for avatar in avatars) != 1:
+        raise SystemExit("数字人清单必须包含且仅包含一个默认人物")
+    if len({(avatar.name, avatar.outfit_name, avatar.version) for avatar in avatars}) != len(avatars):
+        raise SystemExit("数字人清单包含重复的人物外观版本")
+    scenic_code = str(payload.get("scenic_code") or "").strip()
+    if not scenic_code:
+        raise SystemExit("数字人清单缺少景区编码")
+    return scenic_code, avatars
+
+
+def verify_manifest_assets(manifest_path: Path, avatars: list[SeedAvatar]) -> dict[str, bytes]:
+    assets: dict[str, bytes] = {}
+    root = manifest_path.parent.resolve()
+    for avatar in avatars:
+        if Path(avatar.stored_filename).name != avatar.stored_filename:
+            raise SystemExit(f"模型存储名不安全：{avatar.stored_filename}")
+        path = (root / avatar.stored_filename).resolve()
+        if path.parent != root or not path.is_file():
+            raise SystemExit(f"仓库缺少数字人模型：{path}")
+        content = path.read_bytes()
+        validate_vrm_upload(content, avatar.original_filename)
+        if len(content) != avatar.file_size:
+            raise SystemExit(f"模型大小校验失败：{avatar.stored_filename}")
+        if content_sha256(content) != avatar.sha256:
+            raise SystemExit(f"模型 SHA-256 校验失败：{avatar.stored_filename}")
+        assets[avatar.stored_filename] = content
+    return assets
+
+
+def seed(
+    manifest_path: Path,
+    scenic_code: str | None = None,
+    *,
+    session_factory=SessionLocal,
+) -> None:
+    manifest_code, avatars = load_seed_manifest(manifest_path)
+    verify_manifest_assets(manifest_path, avatars)
+    target_code = scenic_code or manifest_code
+    db = session_factory()
+    try:
+        scenic_area = get_scenic_area_by_code(db, target_code)
         if scenic_area is None:
-            raise SystemExit(f"景区不存在：{scenic_code}")
-        for order, (name, gender, role_title, instructions, filename, outfit_name) in enumerate(SEED_AVATARS):
-            human = db.scalar(select(DigitalHuman).where(DigitalHuman.name == name))
+            raise SystemExit(f"景区不存在：{target_code}，请先导入示范景区资料")
+        for item in avatars:
+            human = db.scalar(select(DigitalHuman).where(DigitalHuman.name == item.name))
             if human is None:
                 human = DigitalHuman(
-                    name=name,
-                    gender=gender,
-                    role_title=role_title,
-                    introduction=f"{role_title}，服务于灵山景区数字导览。",
+                    name=item.name,
+                    gender=item.gender,
+                    role_title=item.role_title,
+                    introduction=item.introduction,
                     tts_voice=settings.tts_voice,
-                    tts_instructions=instructions,
+                    tts_instructions=item.tts_instructions,
                 )
                 db.add(human)
                 db.flush()
             variant = db.scalar(
                 select(AvatarVariant).where(
                     AvatarVariant.digital_human_id == human.id,
-                    AvatarVariant.outfit_name == outfit_name,
-                    AvatarVariant.version == "v1",
+                    AvatarVariant.outfit_name == item.outfit_name,
+                    AvatarVariant.version == item.version,
                 )
             )
             if variant is None:
-                source_path = source / filename
-                if not source_path.exists():
-                    raise SystemExit(f"缺少模型文件：{source_path}")
-                content = source_path.read_bytes()
-                validate_vrm_upload(content, filename)
-                stored_filename = find_existing_upload(content) or save_vrm_upload(content)
                 variant = AvatarVariant(
                     digital_human_id=human.id,
-                    outfit_name=outfit_name,
-                    version="v1",
-                    original_filename=filename,
-                    stored_filename=stored_filename,
-                    content_hash=content_sha256(content),
-                    file_size=len(content),
+                    outfit_name=item.outfit_name,
+                    version=item.version,
+                    original_filename=item.original_filename,
+                    stored_filename=item.stored_filename,
+                    content_hash=item.sha256,
+                    file_size=item.file_size,
                 )
                 db.add(variant)
                 db.flush()
             existing = db.scalar(
-                select(AvatarVariant.id)
-                .join_from(AvatarVariant, ScenicAvatarConfig)
+                select(ScenicAvatarConfig)
                 .where(
-                    AvatarVariant.id == variant.id,
                     ScenicAvatarConfig.scenic_area_id == scenic_area.id,
+                    ScenicAvatarConfig.avatar_variant_id == variant.id,
                 )
             )
             if existing is None:
@@ -107,18 +144,28 @@ def seed(source: Path, scenic_code: str) -> None:
                     scenic_area_id=scenic_area.id,
                     avatar_variant_id=variant.id,
                     is_enabled=True,
-                    is_default=order == 0,
-                    sort_order=order,
+                    is_default=item.is_default,
+                    sort_order=item.sort_order,
+                    commit=False,
                 )
         db.commit()
-        print(f"已导入 {len(SEED_AVATARS)} 个数字人模型到 {scenic_area.name}")
+        print(f"已从仓库清单导入 {len(avatars)} 个数字人模型到 {scenic_area.name}")
+    except BaseException:
+        db.rollback()
+        raise
     finally:
         db.close()
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="导入灵山自制 VRM 数字人")
-    parser.add_argument("--source", type=Path, default=Path.home() / "Documents", help="VRM 所在目录")
-    parser.add_argument("--scenic-code", default="lingshan")
+    parser = argparse.ArgumentParser(description="从仓库清单导入自制 VRM 数字人")
+    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST, help="数字人 manifest.json 路径")
+    parser.add_argument("--scenic-code", help="覆盖清单中的景区编码")
+    parser.add_argument("--verify-only", action="store_true", help="仅校验清单和 VRM 文件，不写数据库")
     args = parser.parse_args()
-    seed(args.source, args.scenic_code)
+    _, manifest_avatars = load_seed_manifest(args.manifest)
+    verify_manifest_assets(args.manifest, manifest_avatars)
+    if args.verify_only:
+        print(f"数字人素材校验通过：{len(manifest_avatars)} 个 VRM")
+    else:
+        seed(args.manifest, args.scenic_code)

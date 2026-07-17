@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -67,6 +68,8 @@ class InsightReportOut(BaseModel):
     generation_status: str
     generation_model: str | None
     error_message: str | None
+    trigger_source: str
+    generation_attempts: int
     generated_at: datetime | None
     created_at: datetime
 
@@ -80,3 +83,27 @@ class ReportNarrative(BaseModel):
 
 class InsightResolve(BaseModel):
     resolved: bool = True
+
+
+class InsightReportScheduleUpdate(BaseModel):
+    daily_enabled: bool = True
+    daily_run_time: time
+    weekly_enabled: bool = True
+    weekly_weekday: int = Field(ge=0, le=6)
+    weekly_run_time: time
+    timezone: str = Field(default="Asia/Shanghai", min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def validate_timezone(self) -> "InsightReportScheduleUpdate":
+        try:
+            ZoneInfo(self.timezone)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("无效的时区") from exc
+        return self
+
+
+class InsightReportScheduleOut(InsightReportScheduleUpdate):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    scenic_area_id: int
+    updated_at: datetime

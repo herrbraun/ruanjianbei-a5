@@ -176,5 +176,8 @@ Authorization: Bearer <jwt-token>
 - `PATCH /api/admin/insights/messages/{id}/resolve`：标记事项已解决或重新打开。
 - `POST /api/admin/insight-reports`：按景区、日报/周报和日期范围创建异步报告。
 - `GET /api/admin/insight-reports`、`GET /api/admin/insight-reports/{id}`：查询报告列表和生成结果。
+- `POST /api/admin/insight-reports/{id}/retry`：将失败的报告重新加入生成队列。
+- `GET /api/admin/insight-reports/{id}/export?format=docx`：导出已完成的 Word 报告；管理端也可通过浏览器打印为 PDF。
+- `GET /api/admin/insight-report-schedules/{scenic_area_id}`、`PUT /api/admin/insight-report-schedules/{scenic_area_id}`：读取和更新景区日报/周报自动生成计划。
 
 互动分析和报告均使用独立模型配置。互动分析失败不会影响游客问答；应用启动时会把异常中断的处理中任务恢复到待处理状态。

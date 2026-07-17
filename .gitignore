@@ -67,6 +67,7 @@ backend/uploads/*
 !backend/uploads/avatars/
 backend/uploads/avatars/*
 !backend/uploads/avatars/*.vrm
+!backend/uploads/avatars/manifest.json
 backend/data/vector_db/
 backend/data/docs/
 

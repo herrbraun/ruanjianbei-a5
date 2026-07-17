@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import struct
 from pathlib import Path
 from uuid import uuid4
@@ -9,6 +10,7 @@ from app.config import settings
 
 
 AVATAR_UPLOAD_DIRECTORY = Path(__file__).resolve().parents[2] / "uploads" / "avatars"
+AVATAR_MANIFEST_PATH = AVATAR_UPLOAD_DIRECTORY / "manifest.json"
 
 
 class AvatarStorageError(ValueError):
@@ -49,4 +51,15 @@ def storage_path(stored_filename: str) -> Path:
 
 
 def delete_stored_vrm(stored_filename: str) -> None:
+    try:
+        payload = json.loads(AVATAR_MANIFEST_PATH.read_text(encoding="utf-8"))
+        packaged = {
+            str(item.get("stored_filename"))
+            for item in payload.get("avatars", [])
+            if isinstance(item, dict)
+        }
+    except (OSError, json.JSONDecodeError):
+        packaged = set()
+    if Path(stored_filename).name in packaged:
+        return
     storage_path(stored_filename).unlink(missing_ok=True)

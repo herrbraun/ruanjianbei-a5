@@ -312,14 +312,50 @@ CREATE TABLE IF NOT EXISTS scenic_insight_reports (
     summary TEXT, attention_points JSON, risk_findings JSON, recommendations JSON,
     generation_status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (generation_status IN ('pending','processing','completed','failed')),
     generation_model VARCHAR(100), error_message TEXT,
+    trigger_source VARCHAR(20) NOT NULL DEFAULT 'manual' CHECK (trigger_source IN ('manual','scheduled')),
+    deduplication_key VARCHAR(160) UNIQUE,
+    generation_attempts INTEGER NOT NULL DEFAULT 0,
+    processing_started_at TIMESTAMPTZ,
     created_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     generated_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS ix_scenic_insight_reports_scenic_period ON scenic_insight_reports (scenic_area_id, period_start, period_end);
+ALTER TABLE scenic_insight_reports ADD COLUMN IF NOT EXISTS trigger_source VARCHAR(20) NOT NULL DEFAULT 'manual';
+ALTER TABLE scenic_insight_reports ADD COLUMN IF NOT EXISTS deduplication_key VARCHAR(160);
+ALTER TABLE scenic_insight_reports ADD COLUMN IF NOT EXISTS generation_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE scenic_insight_reports ADD COLUMN IF NOT EXISTS processing_started_at TIMESTAMPTZ;
+DO $$
+BEGIN
+    ALTER TABLE scenic_insight_reports
+        ADD CONSTRAINT ck_scenic_insight_reports_trigger_source
+        CHECK (trigger_source IN ('manual', 'scheduled'));
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_scenic_insight_reports_deduplication_key
+    ON scenic_insight_reports (deduplication_key) WHERE deduplication_key IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS insight_report_schedules (
+    id SERIAL PRIMARY KEY,
+    scenic_area_id INTEGER NOT NULL UNIQUE REFERENCES scenic_areas(id) ON DELETE CASCADE,
+    daily_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    daily_run_time TIME NOT NULL DEFAULT '00:10:00',
+    weekly_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    weekly_weekday INTEGER NOT NULL DEFAULT 0 CHECK (weekly_weekday BETWEEN 0 AND 6),
+    weekly_run_time TIME NOT NULL DEFAULT '00:20:00',
+    timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Shanghai',
+    updated_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 INSERT INTO scenic_areas (code, name, description)
 VALUES ('lingshan', '灵山胜境', '灵山胜境示范景区')
 ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO insight_report_schedules (scenic_area_id)
+SELECT id FROM scenic_areas WHERE is_enabled = TRUE
+ON CONFLICT (scenic_area_id) DO NOTHING;
 
 INSERT INTO knowledge_bases (code, name, description)
 VALUES

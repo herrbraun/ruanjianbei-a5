@@ -13,6 +13,7 @@ from app.config import settings
 from app.crud.insights import recover_stale_insights
 from app.database import SessionLocal
 from app.routers import admin_analytics, auth, avatar, guide, insights, knowledge, media, rag, routes, spots
+from app.services.insight_report import recover_stale_reports
 
 
 @asynccontextmanager
@@ -22,6 +23,7 @@ async def lifespan(_: FastAPI):
         return
     with SessionLocal() as db:
         recover_stale_insights(db, datetime.now(timezone.utc) - timedelta(minutes=10))
+        recover_stale_reports(db, datetime.now(timezone.utc) - timedelta(minutes=10))
     yield
 
 

@@ -1,19 +1,35 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from io import BytesIO
+from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.crud.insights import get_guide_dashboard, period_bounds, process_insight
+from app.crud.insights import period_bounds, process_insight
 from app.crud.knowledge import get_scenic_area_by_id
 from app.database import get_db
-from app.models.guide import GuideMessage, GuideMessageInsight, ScenicInsightReport
+from app.models.guide import GuideMessage, GuideMessageInsight, InsightReportSchedule, ScenicInsightReport
 from app.models.user import User
 from app.routers.auth import require_admin
-from app.schemas.insights import ISSUE_TYPES, InsightReportCreate, InsightReportOut, InsightResolve
-from app.services.insight_report import process_report
+from app.schemas.insights import (
+    ISSUE_TYPES,
+    InsightReportCreate,
+    InsightReportOut,
+    InsightReportScheduleOut,
+    InsightReportScheduleUpdate,
+    InsightResolve,
+)
+from app.services.insight_report import (
+    InsightReportError,
+    build_report_docx,
+    create_or_get_report,
+    get_or_create_report_schedule,
+    process_report,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin-insights"])
 
@@ -96,11 +112,17 @@ def resolve_insight(insight_id: int, payload: InsightResolve, admin: User = Depe
 def create_insight_report(payload: InsightReportCreate, background_tasks: BackgroundTasks, admin: User = Depends(require_admin), db: Session = Depends(get_db)) -> ScenicInsightReport:
     if get_scenic_area_by_id(db, payload.scenic_area_id) is None: raise HTTPException(status_code=404, detail="景区不存在")
     if payload.period_start > payload.period_end: raise HTTPException(status_code=422, detail="报告日期范围无效")
-    dashboard = get_guide_dashboard(db, payload.scenic_area_id, payload.period_start, payload.period_end)
-    snapshot = {**dashboard["metrics"], "top_topics": dashboard["topic_distribution"], "popular_questions": dashboard["popular_questions"], "sentiment_trend": dashboard["sentiment_trend"], "satisfaction_trend": dashboard["satisfaction_trend"]}
-    report = ScenicInsightReport(scenic_area_id=payload.scenic_area_id, period_type=payload.period_type, period_start=payload.period_start, period_end=payload.period_end, metrics_snapshot=snapshot, generation_status="pending", created_by_user_id=admin.id)
-    db.add(report); db.commit(); db.refresh(report)
-    background_tasks.add_task(process_report, report.id)
+    report, created = create_or_get_report(
+        db,
+        scenic_area_id=payload.scenic_area_id,
+        period_type=payload.period_type,
+        period_start=payload.period_start,
+        period_end=payload.period_end,
+        trigger_source="manual",
+        created_by_user_id=admin.id,
+    )
+    if created or report.generation_status == "pending":
+        background_tasks.add_task(process_report, report.id)
     return report
 
 
@@ -115,3 +137,84 @@ def read_insight_report(report_id: int, _: User = Depends(require_admin), db: Se
     report = db.get(ScenicInsightReport, report_id)
     if report is None: raise HTTPException(status_code=404, detail="报告不存在")
     return report
+
+
+@router.post("/insight-reports/{report_id}/retry", response_model=InsightReportOut, status_code=status.HTTP_202_ACCEPTED)
+def retry_insight_report(
+    report_id: int,
+    background_tasks: BackgroundTasks,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> ScenicInsightReport:
+    report = db.get(ScenicInsightReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="报告不存在")
+    if report.generation_status == "processing":
+        raise HTTPException(status_code=409, detail="报告正在生成")
+    if report.generation_status == "completed":
+        raise HTTPException(status_code=409, detail="报告已经生成完成")
+    report.generation_status = "pending"
+    report.generation_attempts = 0
+    report.processing_started_at = None
+    report.error_message = None
+    db.commit()
+    db.refresh(report)
+    background_tasks.add_task(process_report, report.id)
+    return report
+
+
+@router.get("/insight-reports/{report_id}/export")
+def export_insight_report(
+    report_id: int,
+    format: str = Query(default="docx"),
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    if format != "docx":
+        raise HTTPException(status_code=422, detail="当前仅支持 DOCX 导出")
+    report = db.get(ScenicInsightReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="报告不存在")
+    scenic_area = get_scenic_area_by_id(db, report.scenic_area_id)
+    if scenic_area is None:
+        raise HTTPException(status_code=404, detail="景区不存在")
+    try:
+        content = build_report_docx(report, scenic_area.name)
+    except InsightReportError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    report_label = "日报" if report.period_type == "daily" else "周报"
+    filename = f"{scenic_area.name}游客感受度{report_label}-{report.period_start}-{report.period_end}.docx"
+    return StreamingResponse(
+        BytesIO(content),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
+
+
+@router.get("/insight-report-schedules/{scenic_area_id}", response_model=InsightReportScheduleOut)
+def read_insight_report_schedule(
+    scenic_area_id: int,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> InsightReportSchedule:
+    if get_scenic_area_by_id(db, scenic_area_id) is None:
+        raise HTTPException(status_code=404, detail="景区不存在")
+    return get_or_create_report_schedule(db, scenic_area_id)
+
+
+@router.put("/insight-report-schedules/{scenic_area_id}", response_model=InsightReportScheduleOut)
+def update_insight_report_schedule(
+    scenic_area_id: int,
+    payload: InsightReportScheduleUpdate,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> InsightReportSchedule:
+    if get_scenic_area_by_id(db, scenic_area_id) is None:
+        raise HTTPException(status_code=404, detail="景区不存在")
+    schedule = get_or_create_report_schedule(db, scenic_area_id)
+    for field, value in payload.model_dump().items():
+        setattr(schedule, field, value)
+    schedule.updated_by_user_id = admin.id
+    db.commit()
+    db.refresh(schedule)
+    return schedule

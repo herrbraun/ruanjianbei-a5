@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { Refresh, Warning } from '@element-plus/icons-vue'
+import { Clock, Download, Printer, Refresh, Warning } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
-import { insightsApi, type InsightMessage, type InsightReport } from '@/api/insights'
+import { insightsApi, type InsightMessage, type InsightReport, type InsightReportSchedule } from '@/api/insights'
 import { knowledgeApi, type ScenicArea } from '@/api/knowledge'
 import AppLayout from '@/layouts/AppLayout.vue'
 
@@ -14,8 +14,12 @@ const scenicAreas = ref<ScenicArea[]>([])
 const selectedScenicAreaId = ref<number>()
 const loadingReports = ref(false)
 const generatingReport = ref(false)
+const savingSchedule = ref(false)
+const exportingReport = ref(false)
+const REPORT_POLL_LIMIT = 100
 const reports = ref<InsightReport[]>([])
 const selectedReport = ref<InsightReport | null>(null)
+const schedule = ref<InsightReportSchedule | null>(null)
 const loadingRisks = ref(false)
 const retryingFailed = ref(false)
 const risks = ref<InsightMessage[]>([])
@@ -51,6 +55,11 @@ const riskFilters = reactive({
 })
 
 const issueTypes = ['排队时间', '路线指引', '价格问题', '环境卫生', '工作人员服务', '数字人回答不准确', '响应速度', '语音或数字人体验', '设施问题', '无明确问题']
+const weekdayOptions = [
+  { label: '周一', value: 0 }, { label: '周二', value: 1 }, { label: '周三', value: 2 },
+  { label: '周四', value: 3 }, { label: '周五', value: 4 }, { label: '周六', value: 5 },
+  { label: '周日', value: 6 },
+]
 const currentScenicName = computed(() => scenicAreas.value.find((item) => item.id === selectedScenicAreaId.value)?.name || '当前景区')
 
 function errorText(error: unknown, fallback: string) {
@@ -94,9 +103,83 @@ async function refreshSelectedReport() {
   }
 }
 
+async function loadSchedule() {
+  if (!selectedScenicAreaId.value) return
+  try {
+    schedule.value = (await insightsApi.getSchedule(selectedScenicAreaId.value)).data
+  } catch (error) {
+    ElMessage.error(errorText(error, '自动报告配置加载失败'))
+  }
+}
+
+async function saveSchedule() {
+  if (!selectedScenicAreaId.value || !schedule.value) return
+  savingSchedule.value = true
+  try {
+    schedule.value = (await insightsApi.updateSchedule(selectedScenicAreaId.value, {
+      daily_enabled: schedule.value.daily_enabled,
+      daily_run_time: schedule.value.daily_run_time,
+      weekly_enabled: schedule.value.weekly_enabled,
+      weekly_weekday: schedule.value.weekly_weekday,
+      weekly_run_time: schedule.value.weekly_run_time,
+      timezone: schedule.value.timezone,
+    })).data
+    ElMessage.success('自动报告计划已保存')
+  } catch (error) {
+    ElMessage.error(errorText(error, '自动报告计划保存失败'))
+  } finally {
+    savingSchedule.value = false
+  }
+}
+
+async function exportSelectedReport() {
+  if (!selectedReport.value || selectedReport.value.generation_status !== 'completed') return
+  exportingReport.value = true
+  try {
+    const response = await insightsApi.exportReport(selectedReport.value.id)
+    const url = URL.createObjectURL(response.data)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${currentScenicName.value}游客感受度${selectedReport.value.period_type === 'daily' ? '日报' : '周报'}-${selectedReport.value.period_start}-${selectedReport.value.period_end}.docx`
+    anchor.style.display = 'none'
+    document.body.appendChild(anchor)
+    anchor.click()
+    window.setTimeout(() => {
+      anchor.remove()
+      URL.revokeObjectURL(url)
+    }, 1000)
+  } catch (error) {
+    ElMessage.error(errorText(error, '报告导出失败'))
+  } finally {
+    exportingReport.value = false
+  }
+}
+
+function printSelectedReport() {
+  if (selectedReport.value?.generation_status !== 'completed') return
+  window.print()
+}
+
+async function retrySelectedReport() {
+  if (!selectedReport.value) return
+  try {
+    const report = (await insightsApi.retryReport(selectedReport.value.id)).data
+    selectedReport.value = report
+    const index = reports.value.findIndex((item) => item.id === report.id)
+    if (index >= 0) reports.value[index] = report
+    scheduleReportPoll(report.id)
+    ElMessage.success('报告已重新加入生成队列')
+  } catch (error) {
+    ElMessage.error(errorText(error, '报告重试失败'))
+  }
+}
+
 function scheduleReportPoll(reportId: number, attempt = 0) {
   if (reportPollTimer) clearTimeout(reportPollTimer)
-  if (attempt >= 20) return
+  if (attempt >= REPORT_POLL_LIMIT) {
+    ElMessage.warning('报告仍在后台生成，可稍后点击“刷新报告状态”查看结果')
+    return
+  }
   reportPollTimer = setTimeout(async () => {
     try {
       const report = (await insightsApi.getReport(reportId)).data
@@ -120,7 +203,7 @@ async function createReport() {
       period_start: reportRange.value[0],
       period_end: reportRange.value[1],
     })).data
-    reports.value.unshift(report)
+    if (!reports.value.some((item) => item.id === report.id)) reports.value.unshift(report)
     selectedReport.value = report
     ElMessage.success('报告任务已创建，正在生成')
     scheduleReportPoll(report.id)
@@ -201,7 +284,7 @@ async function toggleResolved(row: InsightMessage) {
 async function onScenicChange() {
   riskPage.value = 1
   selectedReport.value = null
-  await Promise.all([loadReports(), loadRisks()])
+  await Promise.all([loadReports(), loadRisks(), loadSchedule()])
 }
 
 async function initialize() {
@@ -209,7 +292,7 @@ async function initialize() {
     scenicAreas.value = (await knowledgeApi.listScenicAreas()).data
     const requested = Number(route.query.scenic_area_id)
     selectedScenicAreaId.value = scenicAreas.value.some((item) => item.id === requested) ? requested : scenicAreas.value[0]?.id
-    await Promise.all([loadReports(), loadRisks()])
+    await Promise.all([loadReports(), loadRisks(), loadSchedule()])
   } catch (error) {
     ElMessage.error(errorText(error, '游客洞察工作台初始化失败'))
   }
@@ -243,6 +326,27 @@ onBeforeUnmount(() => { if (reportPollTimer) clearTimeout(reportPollTimer) })
           <el-button type="primary" :loading="generatingReport" @click="createReport">生成报告</el-button>
         </section>
 
+        <section v-if="schedule" class="report-schedule-card">
+          <header>
+            <div><span><Clock /> AUTOMATION</span><h2>自动报告计划</h2></div>
+            <small>按 Asia/Shanghai 生成上一完整周期，服务重启后会自动补偿遗漏任务。</small>
+          </header>
+          <div class="report-schedule-grid">
+            <article>
+              <el-switch v-model="schedule.daily_enabled" active-text="每日自动生成" />
+              <label>生成时间<el-time-picker v-model="schedule.daily_run_time" value-format="HH:mm:ss" format="HH:mm" :disabled="!schedule.daily_enabled" /></label>
+              <p>默认生成上一自然日的游客感受度日报。</p>
+            </article>
+            <article>
+              <el-switch v-model="schedule.weekly_enabled" active-text="每周自动生成" />
+              <label>生成日<el-select v-model="schedule.weekly_weekday" :disabled="!schedule.weekly_enabled"><el-option v-for="item in weekdayOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></label>
+              <label>生成时间<el-time-picker v-model="schedule.weekly_run_time" value-format="HH:mm:ss" format="HH:mm" :disabled="!schedule.weekly_enabled" /></label>
+              <p>生成执行日前连续七天的完整周报。</p>
+            </article>
+          </div>
+          <footer><span>时区：{{ schedule.timezone }}</span><el-button type="primary" plain :loading="savingSchedule" @click="saveSchedule">保存自动计划</el-button></footer>
+        </section>
+
         <div class="report-workspace" v-loading="loadingReports">
           <aside class="report-list">
             <button v-for="report in reports" :key="report.id" type="button" :class="{ active: selectedReport?.id === report.id }" @click="selectedReport = report">
@@ -253,9 +357,9 @@ onBeforeUnmount(() => { if (reportPollTimer) clearTimeout(reportPollTimer) })
           </aside>
 
           <article v-if="selectedReport" class="report-detail">
-            <header><div><span>{{ selectedReport.period_type === 'daily' ? '游客感受度日报' : '游客感受度周报' }}</span><h2>{{ selectedReport.period_start }} 至 {{ selectedReport.period_end }}</h2></div><el-tag :type="selectedReport.generation_status === 'failed' ? 'danger' : selectedReport.generation_status === 'completed' ? 'success' : 'warning'">{{ reportStatusText(selectedReport.generation_status) }}</el-tag></header>
+            <header><div><span>{{ selectedReport.period_type === 'daily' ? '游客感受度日报' : '游客感受度周报' }} · {{ selectedReport.trigger_source === 'scheduled' ? '自动生成' : '手动生成' }}</span><h2>{{ selectedReport.period_start }} 至 {{ selectedReport.period_end }}</h2></div><div class="report-detail-actions"><el-tag :type="selectedReport.generation_status === 'failed' ? 'danger' : selectedReport.generation_status === 'completed' ? 'success' : 'warning'">{{ reportStatusText(selectedReport.generation_status) }}</el-tag><el-button :icon="Download" :loading="exportingReport" :disabled="selectedReport.generation_status !== 'completed'" @click="exportSelectedReport">导出 Word</el-button><el-button :icon="Printer" :disabled="selectedReport.generation_status !== 'completed'" @click="printSelectedReport">打印 / PDF</el-button></div></header>
             <div v-if="selectedReport.generation_status === 'pending' || selectedReport.generation_status === 'processing'" class="report-waiting"><el-icon class="is-loading"><Refresh /></el-icon><p>模型正在根据聚合统计生成报告，不会传入游客身份信息。</p></div>
-            <el-alert v-else-if="selectedReport.generation_status === 'failed'" type="error" :closable="false" title="报告生成失败"><template #default>{{ selectedReport.error_message || '可稍后重新生成一份报告。' }}</template></el-alert>
+            <div v-else-if="selectedReport.generation_status === 'failed'" class="report-failed"><el-alert type="error" :closable="false" title="报告生成失败"><template #default>{{ selectedReport.error_message || '可稍后重试。' }}</template></el-alert><el-button type="primary" plain :icon="Refresh" @click="retrySelectedReport">重新生成</el-button></div>
             <template v-else>
               <section><h3>总体结论</h3><p>{{ selectedReport.summary }}</p></section>
               <section><h3>重点关注</h3><ul><li v-for="item in selectedReport.attention_points || []" :key="item">{{ item }}</li></ul></section>
