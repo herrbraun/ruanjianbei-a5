@@ -14,13 +14,20 @@ if TYPE_CHECKING:
 
 class DigitalHuman(Base):
     __tablename__ = "digital_humans"
-    __table_args__ = (CheckConstraint("gender IN ('female', 'male', 'unspecified')", name="ck_digital_humans_gender"),)
+    __table_args__ = (
+        CheckConstraint("gender IN ('female', 'male', 'unspecified')", name="ck_digital_humans_gender"),
+        CheckConstraint(
+            "tts_provider IN ('volcengine', 'dashscope')",
+            name="ck_digital_humans_tts_provider",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
     gender: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'unspecified'"))
     role_title: Mapped[str] = mapped_column(String(120), nullable=False)
     introduction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tts_provider: Mapped[str] = mapped_column(String(30), nullable=False, server_default=text("'volcengine'"))
     tts_voice: Mapped[str] = mapped_column(String(100), nullable=False)
     tts_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
@@ -30,6 +37,30 @@ class DigitalHuman(Base):
     )
 
     variants: Mapped[list["AvatarVariant"]] = relationship(back_populates="digital_human", cascade="all, delete-orphan")
+
+
+class TtsProviderSetting(Base):
+    __tablename__ = "tts_provider_settings"
+    __table_args__ = (
+        CheckConstraint("provider IN ('volcengine', 'dashscope')", name="ck_tts_provider_settings_provider"),
+        CheckConstraint(
+            "first_chunk_timeout_ms BETWEEN 500 AND 10000",
+            name="ck_tts_provider_settings_first_chunk_timeout",
+        ),
+    )
+
+    provider: Mapped[str] = mapped_column(String(30), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    is_fallback: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    model: Mapped[str] = mapped_column(String(120), nullable=False)
+    default_voice: Mapped[str] = mapped_column(String(100), nullable=False)
+    first_chunk_timeout_ms: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("4500"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
 
 
 class AvatarVariant(Base):

@@ -192,12 +192,40 @@ CREATE TABLE IF NOT EXISTS digital_humans (
     gender VARCHAR(20) NOT NULL DEFAULT 'unspecified' CHECK (gender IN ('female', 'male', 'unspecified')),
     role_title VARCHAR(120) NOT NULL,
     introduction TEXT,
+    tts_provider VARCHAR(30) NOT NULL DEFAULT 'volcengine'
+        CHECK (tts_provider IN ('volcengine', 'dashscope')),
     tts_voice VARCHAR(100) NOT NULL,
     tts_instructions TEXT,
     is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS tts_provider_settings (
+    provider VARCHAR(30) PRIMARY KEY CHECK (provider IN ('volcengine', 'dashscope')),
+    display_name VARCHAR(80) NOT NULL,
+    is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    is_fallback BOOLEAN NOT NULL DEFAULT FALSE,
+    model VARCHAR(120) NOT NULL,
+    default_voice VARCHAR(100) NOT NULL,
+    first_chunk_timeout_ms INTEGER NOT NULL DEFAULT 4500
+        CHECK (first_chunk_timeout_ms BETWEEN 500 AND 10000),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tts_provider_settings_one_default
+    ON tts_provider_settings (is_default) WHERE is_default;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tts_provider_settings_one_fallback
+    ON tts_provider_settings (is_fallback) WHERE is_fallback;
+
+INSERT INTO tts_provider_settings
+    (provider, display_name, is_enabled, is_default, is_fallback, model, default_voice, first_chunk_timeout_ms)
+VALUES
+    ('volcengine', '火山引擎实时语音', TRUE, TRUE, FALSE, 'seed-tts-2.0', 'zh_female_vv_uranus_bigtts', 4500),
+    ('dashscope', '阿里云百炼千问语音', TRUE, FALSE, TRUE, 'qwen3-tts-instruct-flash', 'Cherry', 4500)
+ON CONFLICT (provider) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS avatar_variants (
     id SERIAL PRIMARY KEY,

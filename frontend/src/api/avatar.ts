@@ -3,8 +3,23 @@ import { http } from './http'
 export type AvatarGender = 'female' | 'male' | 'unspecified'
 
 export interface VoiceOption {
+  provider: TtsProvider
   value: string
   label: string
+}
+
+export type TtsProvider = 'volcengine' | 'dashscope'
+
+export interface TtsProviderSetting {
+  provider: TtsProvider
+  display_name: string
+  is_enabled: boolean
+  is_default: boolean
+  is_fallback: boolean
+  model: string
+  default_voice: string
+  first_chunk_timeout_ms: number
+  configured: boolean
 }
 
 export interface AvatarVariant {
@@ -25,6 +40,7 @@ export interface DigitalHuman {
   gender: AvatarGender
   role_title: string
   introduction: string | null
+  tts_provider: TtsProvider
   tts_voice: string
   tts_instructions: string | null
   is_enabled: boolean
@@ -60,6 +76,7 @@ export interface DigitalHumanPayload {
   gender: AvatarGender
   role_title: string
   introduction?: string | null
+  tts_provider: TtsProvider
   tts_voice: string
   tts_instructions?: string | null
 }
@@ -70,8 +87,15 @@ export function avatarAssetUrl(scenicAreaCode: string, avatarVariantId: number) 
   return `${apiBaseUrl}/avatars/scenic-areas/${encodeURIComponent(scenicAreaCode)}/variants/${avatarVariantId}/asset`
 }
 
+export function ttsProviderTestUrl(provider: TtsProvider) {
+  return `${apiBaseUrl}/admin/tts/providers/${provider}/test`
+}
+
 export const avatarApi = {
-  listVoices: () => http.get<VoiceOption[]>('/admin/avatars/voices'),
+  listVoices: (provider: TtsProvider = 'volcengine') => http.get<VoiceOption[]>('/admin/avatars/voices', { params: { provider } }),
+  listTtsProviders: () => http.get<TtsProviderSetting[]>('/admin/tts/providers'),
+  updateTtsProvider: (provider: TtsProvider, data: Partial<Omit<TtsProviderSetting, 'provider' | 'display_name' | 'configured'>>) =>
+    http.patch<TtsProviderSetting>(`/admin/tts/providers/${provider}`, data),
   listHumans: () => http.get<DigitalHuman[]>('/admin/avatars/humans'),
   createHuman: (data: DigitalHumanPayload) => http.post<DigitalHuman>('/admin/avatars/humans', data),
   updateHuman: (id: number, data: Partial<DigitalHumanPayload> & { is_enabled?: boolean }) =>

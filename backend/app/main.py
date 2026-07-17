@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.crud.insights import recover_stale_insights
 from app.database import SessionLocal
-from app.routers import admin_analytics, auth, avatar, guide, insights, knowledge, media, rag, routes, spots
+from app.routers import admin_analytics, auth, avatar, guide, insights, knowledge, media, rag, routes, spots, tts
 from app.services.insight_report import recover_stale_reports
 
 
@@ -47,6 +47,7 @@ app.include_router(routes.router, prefix="/api")
 app.include_router(admin_analytics.router, prefix="/api")
 app.include_router(insights.router, prefix="/api")
 app.include_router(media.router)
+app.include_router(tts.router, prefix="/api")
 
 
 @app.get("/api/health")

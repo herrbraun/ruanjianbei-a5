@@ -1,20 +1,38 @@
 <script setup lang="ts">
 import { Delete, EditPen, Microphone, StarFilled, UploadFilled, User } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
-import { avatarApi, type AvatarGender, type DigitalHuman, type ScenicAvatar, type VoiceOption } from '@/api/avatar'
+import {
+  avatarApi,
+  ttsProviderTestUrl,
+  type AvatarGender,
+  type DigitalHuman,
+  type ScenicAvatar,
+  type TtsProvider,
+  type TtsProviderSetting,
+  type VoiceOption,
+} from '@/api/avatar'
 import { knowledgeApi, type ScenicArea } from '@/api/knowledge'
 import AppLayout from '@/layouts/AppLayout.vue'
+import { StreamingPcmPlayer } from '@/services/streamingPcmPlayer'
+import { useAuthStore } from '@/stores/auth'
+
+const authStore = useAuthStore()
 
 const scenicAreas = ref<ScenicArea[]>([])
 const selectedScenicAreaId = ref<number>()
 const scenicAvatars = ref<ScenicAvatar[]>([])
 const humans = ref<DigitalHuman[]>([])
 const voices = ref<VoiceOption[]>([])
+const ttsProviders = ref<TtsProviderSetting[]>([])
+const testingProvider = ref<TtsProvider>()
+const testingStartedAt = ref(0)
+const testingFirstAudioMs = ref<number>()
 const loading = ref(false)
 const humanDialogVisible = ref(false)
 const variantDialogVisible = ref(false)
+const providerDialogVisible = ref(false)
 const editingHumanId = ref<number>()
 const selectedFile = ref<File>()
 const uploadInput = ref<HTMLInputElement>()
@@ -27,9 +45,23 @@ const humanForm = reactive({
   gender: 'female' as AvatarGender,
   role_title: '',
   introduction: '',
+  tts_provider: 'volcengine' as TtsProvider,
   tts_voice: '',
   tts_instructions: '',
   is_enabled: true,
+})
+const providerTestPlayer = new StreamingPcmPlayer({
+  onFirstAudio: () => {
+    testingFirstAudioMs.value = Math.round(performance.now() - testingStartedAt.value)
+  },
+  onEnded: () => { testingProvider.value = undefined },
+})
+const providerForm = reactive({
+  provider: 'volcengine' as TtsProvider,
+  displayName: '',
+  model: '',
+  defaultVoice: '',
+  firstChunkTimeoutMs: 4500,
 })
 
 const variantForm = reactive({
@@ -43,15 +75,18 @@ const variantForm = reactive({
 })
 
 function errorText(error: unknown, fallback: string) {
-  return (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || fallback
+  return (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+    || (error instanceof Error ? error.message : fallback)
 }
 
-function resetHumanForm(human?: DigitalHuman) {
+async function resetHumanForm(human?: DigitalHuman) {
   editingHumanId.value = human?.id
   humanForm.name = human?.name || ''
   humanForm.gender = human?.gender || 'female'
   humanForm.role_title = human?.role_title || ''
   humanForm.introduction = human?.introduction || ''
+  humanForm.tts_provider = human?.tts_provider || ttsProviders.value.find((item) => item.is_default)?.provider || 'volcengine'
+  await loadVoices(humanForm.tts_provider)
   humanForm.tts_voice = human?.tts_voice || voices.value[0]?.value || ''
   humanForm.tts_instructions = human?.tts_instructions || ''
   humanForm.is_enabled = human?.is_enabled ?? true
@@ -72,20 +107,89 @@ function resetVariantForm() {
 async function loadData() {
   loading.value = true
   try {
-    const [areasResponse, humansResponse, voicesResponse] = await Promise.all([
+    const [areasResponse, humansResponse, providersResponse] = await Promise.all([
       knowledgeApi.listScenicAreas(),
       avatarApi.listHumans(),
-      avatarApi.listVoices(),
+      avatarApi.listTtsProviders(),
     ])
     scenicAreas.value = areasResponse.data
     humans.value = humansResponse.data
-    voices.value = voicesResponse.data
+    ttsProviders.value = providersResponse.data
+    await loadVoices(ttsProviders.value.find((item) => item.is_default)?.provider || 'volcengine')
     if (!selectedScenicAreaId.value) selectedScenicAreaId.value = scenicAreas.value[0]?.id
     await loadScenicAvatars()
   } catch (error) {
     ElMessage.error(errorText(error, '数字人配置加载失败'))
   } finally {
     loading.value = false
+  }
+}
+
+async function loadVoices(provider: TtsProvider) {
+  voices.value = (await avatarApi.listVoices(provider)).data
+}
+
+async function onHumanProviderChange(provider: TtsProvider) {
+  await loadVoices(provider)
+  humanForm.tts_voice = voices.value[0]?.value || ''
+}
+
+async function updateProvider(provider: TtsProviderSetting, patch: Partial<TtsProviderSetting>) {
+  try {
+    await avatarApi.updateTtsProvider(provider.provider, patch)
+    ttsProviders.value = (await avatarApi.listTtsProviders()).data
+    ElMessage.success('语音服务配置已更新')
+  } catch (error) {
+    ElMessage.error(errorText(error, '语音服务配置更新失败'))
+  }
+}
+
+async function openProviderDialog(provider: TtsProviderSetting) {
+  providerForm.provider = provider.provider
+  providerForm.displayName = provider.display_name
+  providerForm.model = provider.model
+  providerForm.defaultVoice = provider.default_voice
+  providerForm.firstChunkTimeoutMs = provider.first_chunk_timeout_ms
+  await loadVoices(provider.provider)
+  providerDialogVisible.value = true
+}
+
+async function saveProviderSettings() {
+  try {
+    await avatarApi.updateTtsProvider(providerForm.provider, {
+      model: providerForm.model.trim(),
+      default_voice: providerForm.defaultVoice,
+      first_chunk_timeout_ms: providerForm.firstChunkTimeoutMs,
+    })
+    ttsProviders.value = (await avatarApi.listTtsProviders()).data
+    providerDialogVisible.value = false
+    ElMessage.success('语音模型参数已保存')
+  } catch (error) {
+    ElMessage.error(errorText(error, '语音模型参数保存失败'))
+  }
+}
+
+async function testProvider(provider: TtsProviderSetting) {
+  providerTestPlayer.stop()
+  testingProvider.value = provider.provider
+  testingStartedAt.value = performance.now()
+  testingFirstAudioMs.value = undefined
+  try {
+    await providerTestPlayer.play(
+      ttsProviderTestUrl(provider.provider),
+      authStore.token || '',
+      async () => authStore.token || '',
+      { text: '欢迎来到灵山胜境，我是您的数字讲解员。', voice: provider.default_voice },
+    )
+    ElMessage.success(
+      testingFirstAudioMs.value
+        ? `${provider.display_name}首段语音 ${testingFirstAudioMs.value} ms 返回`
+        : `${provider.display_name}试听完成`,
+    )
+  } catch (error) {
+    ElMessage.error(errorText(error, `${provider.display_name}试听失败`))
+  } finally {
+    testingProvider.value = undefined
   }
 }
 
@@ -107,6 +211,7 @@ async function saveHuman() {
     gender: humanForm.gender,
     role_title: humanForm.role_title.trim(),
     introduction: humanForm.introduction.trim() || null,
+    tts_provider: humanForm.tts_provider,
     tts_voice: humanForm.tts_voice,
     tts_instructions: humanForm.tts_instructions.trim() || null,
   }
@@ -194,8 +299,8 @@ async function removeVariant(avatar: ScenicAvatar) {
   }
 }
 
-function openHumanDialog(human?: DigitalHuman) {
-  resetHumanForm(human)
+async function openHumanDialog(human?: DigitalHuman) {
+  await resetHumanForm(human)
   humanDialogVisible.value = true
 }
 
@@ -210,6 +315,7 @@ function formatBytes(value: number) {
 
 watch(selectedScenicAreaId, () => void loadScenicAvatars())
 onMounted(() => void loadData())
+onBeforeUnmount(() => void providerTestPlayer.destroy())
 </script>
 
 <template>
@@ -226,6 +332,32 @@ onMounted(() => void loadData())
           <el-button type="primary" :icon="UploadFilled" :disabled="!selectedScenicAreaId || !humans.length" @click="openVariantDialog">上传 VRM 外观</el-button>
         </div>
       </header>
+
+      <section class="tts-provider-section">
+        <div class="avatar-section-heading">
+          <div><p class="eyebrow">VOICE DELIVERY</p><h3>实时语音服务</h3></div>
+          <small>默认服务负责日常播报；首包失败时才尝试备用服务，不会在一句话中途换声。</small>
+        </div>
+        <div class="tts-provider-grid">
+          <article v-for="provider in ttsProviders" :key="provider.provider" class="tts-provider-card" :class="{ primary: provider.is_default, unavailable: !provider.configured }">
+            <header>
+              <div><span class="tts-provider-dot" /><div><h4>{{ provider.display_name }}</h4><p>{{ provider.model }}</p></div></div>
+              <el-tag :type="provider.configured ? 'success' : 'danger'" effect="plain">{{ provider.configured ? '密钥已配置' : '缺少密钥' }}</el-tag>
+            </header>
+            <div class="tts-provider-metrics">
+              <span><small>首包时限</small><strong>{{ provider.first_chunk_timeout_ms }} ms</strong></span>
+              <span><small>默认音色</small><strong>{{ provider.default_voice }}</strong></span>
+            </div>
+            <footer>
+              <el-switch :model-value="provider.is_enabled" :disabled="provider.is_default || provider.is_fallback" active-text="启用" @change="updateProvider(provider, { is_enabled: Boolean($event) })" />
+              <el-button v-if="!provider.is_default" text @click="updateProvider(provider, { is_default: true })">设为默认</el-button>
+              <el-button v-if="!provider.is_fallback" text @click="updateProvider(provider, { is_fallback: true })">设为备用</el-button>
+              <el-button text @click="openProviderDialog(provider)">参数</el-button>
+              <el-button type="primary" plain :loading="testingProvider === provider.provider" :disabled="!provider.configured" @click="testProvider(provider)">试听测速</el-button>
+            </footer>
+          </article>
+        </div>
+      </section>
 
       <section class="avatar-control-strip">
         <div>
@@ -279,7 +411,7 @@ onMounted(() => void loadData())
             <span class="avatar-person-mark">{{ human.name.slice(-1) }}</span>
             <div class="avatar-person-main"><p>{{ human.gender === 'female' ? '女性讲解员' : human.gender === 'male' ? '男性讲解员' : '数字讲解员' }}</p><h4>{{ human.name }}</h4><strong>{{ human.role_title }}</strong></div>
             <p>{{ human.introduction || '暂未填写人物介绍。' }}</p>
-            <div class="avatar-person-voice"><Microphone /><span>{{ human.tts_voice }}</span><small>{{ human.tts_instructions || '采用默认景区讲解语气' }}</small></div>
+            <div class="avatar-person-voice"><Microphone /><span>{{ human.tts_provider === 'volcengine' ? '火山引擎' : '千问' }} · {{ human.tts_voice }}</span><small>{{ human.tts_instructions || '采用默认景区讲解语气' }}</small></div>
             <footer><el-switch :model-value="human.is_enabled" active-text="启用" inactive-text="停用" @change="toggleHuman(human)" /><span /><el-button text :icon="EditPen" @click="openHumanDialog(human)">编辑</el-button><el-button text type="danger" :icon="Delete" @click="removeHuman(human)">删除</el-button></footer>
           </article>
         </div>
@@ -291,10 +423,20 @@ onMounted(() => void loadData())
         <div class="avatar-form-two-column"><el-form-item label="中文名字"><el-input v-model="humanForm.name" placeholder="例如：沈清莲" /></el-form-item><el-form-item label="性别"><el-select v-model="humanForm.gender"><el-option label="女性" value="female" /><el-option label="男性" value="male" /><el-option label="未指定" value="unspecified" /></el-select></el-form-item></div>
         <el-form-item label="角色定位"><el-input v-model="humanForm.role_title" placeholder="例如：灵山文化讲解员" /></el-form-item>
         <el-form-item label="人物介绍"><el-input v-model="humanForm.introduction" type="textarea" :rows="2" /></el-form-item>
-        <div class="avatar-form-two-column"><el-form-item label="系统音色"><el-select v-model="humanForm.tts_voice"><el-option v-for="voice in voices" :key="voice.value" :label="voice.label" :value="voice.value" /></el-select></el-form-item><el-form-item v-if="editingHumanId" label="人物状态"><el-switch v-model="humanForm.is_enabled" active-text="启用" inactive-text="停用" /></el-form-item></div>
+        <div class="avatar-form-two-column"><el-form-item label="语音服务"><el-select v-model="humanForm.tts_provider" @change="onHumanProviderChange"><el-option v-for="provider in ttsProviders.filter((item) => item.is_enabled)" :key="provider.provider" :label="provider.display_name" :value="provider.provider" /></el-select></el-form-item><el-form-item label="系统音色"><el-select v-model="humanForm.tts_voice"><el-option v-for="voice in voices" :key="voice.value" :label="voice.label" :value="voice.value" /></el-select></el-form-item></div>
+        <el-form-item v-if="editingHumanId" label="人物状态"><el-switch v-model="humanForm.is_enabled" active-text="启用" inactive-text="停用" /></el-form-item>
         <el-form-item label="讲解风格指令"><el-input v-model="humanForm.tts_instructions" type="textarea" :rows="3" placeholder="例如：语速适中，温和、清晰地介绍灵山文化。" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="humanDialogVisible = false">取消</el-button><el-button type="primary" @click="saveHuman">保存人物</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="providerDialogVisible" :title="`${providerForm.displayName}参数`" width="560px" destroy-on-close>
+      <el-form label-position="top" class="avatar-form">
+        <el-form-item label="模型 / 资源 ID"><el-input v-model="providerForm.model" /></el-form-item>
+        <el-form-item label="默认音色"><el-select v-model="providerForm.defaultVoice"><el-option v-for="voice in voices" :key="voice.value" :label="voice.label" :value="voice.value" /></el-select></el-form-item>
+        <el-form-item label="首包超时阈值"><el-input-number v-model="providerForm.firstChunkTimeoutMs" :min="500" :max="10000" :step="100" /><small class="avatar-form-hint">超过此时间且尚未收到任何音频时，系统才会尝试备用服务。</small></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="providerDialogVisible = false">取消</el-button><el-button type="primary" @click="saveProviderSettings">保存参数</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="variantDialogVisible" title="上传 VRM 外观版本" width="620px" destroy-on-close>

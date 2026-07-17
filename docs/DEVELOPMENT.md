@@ -15,10 +15,16 @@ python scripts\seed_avatars.py --source "$HOME\Documents" --scenic-code lingshan
 
 ```env
 GUIDE_TTS_VOICE_OPTIONS=Cherry
+VOLCENGINE_TTS_API_KEY=your_volcengine_tts_api_key
+VOLCENGINE_TTS_ENDPOINT=https://openspeech.bytedance.com/api/v3/tts/unidirectional
+VOLCENGINE_TTS_RESOURCE_ID=seed-tts-2.0
+VOLCENGINE_TTS_MODEL=seed-tts-2.0
+VOLCENGINE_TTS_DEFAULT_VOICE=zh_female_vv_uranus_bigtts
+TTS_FIRST_CHUNK_TIMEOUT_MS=4500
 AVATAR_MAX_UPLOAD_BYTES=83886080
 ```
 
-游客端用 Three.js 与 `@pixiv/three-vrm` 渲染 VRM，并用 TTS 音频的 `AnalyserNode` 音量驱动 `aa` 嘴型；模型或 WebGL 不可用时会保留文字与语音讲解并显示静态卡片。
+游客端用 Three.js 与 `@pixiv/three-vrm` 渲染 VRM，并用 TTS 音频的 `AnalyserNode` 音量驱动 `aa` 嘴型；火山实时 TTS 以 24kHz 单声道 PCM 分片返回，Web Audio 收到首片后立即排队播放。后台可配置火山/千问的默认、备用、模型、音色和首包阈值；只有在首个音频分片之前失败才切换备用服务。模型或 WebGL 不可用时会保留文字与语音讲解并显示静态卡片。
 
 仓库内的 `backend/uploads/avatars/manifest.json` 是 10 个比赛数字人的可复现清单，直接关联已提交的哈希命名 VRM。全新数据库迁移完成后执行：
 

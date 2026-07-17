@@ -53,12 +53,22 @@ def _not_found(detail: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
 
 
-def _voice_options() -> list[VoiceOptionOut]:
-    return [VoiceOptionOut(value=voice, label=voice) for voice in settings.guide_tts_voice_values]
+def _voice_options(provider: str) -> list[VoiceOptionOut]:
+    if provider == "volcengine":
+        return [
+            VoiceOptionOut(provider=provider, value=value, label=label)
+            for value, label in settings.volcengine_tts_voices
+        ]
+    if provider == "dashscope":
+        return [
+            VoiceOptionOut(provider=provider, value=voice, label=voice)
+            for voice in settings.guide_tts_voice_values
+        ]
+    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="不支持的语音服务商")
 
 
-def _validate_voice(voice: str) -> None:
-    if voice not in settings.guide_tts_voice_values:
+def _validate_voice(provider: str, voice: str) -> None:
+    if voice not in {option.value for option in _voice_options(provider)}:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="请选择系统配置中的有效音色")
 
 
@@ -97,8 +107,11 @@ def _scenic_avatar_out(config: ScenicAvatarConfig) -> ScenicAvatarOut:
 
 
 @router.get("/admin/avatars/voices", response_model=list[VoiceOptionOut])
-def read_voice_options(_: User = Depends(require_admin)) -> list[VoiceOptionOut]:
-    return _voice_options()
+def read_voice_options(
+    provider: str = "volcengine",
+    _: User = Depends(require_admin),
+) -> list[VoiceOptionOut]:
+    return _voice_options(provider)
 
 
 @router.get("/admin/avatars/humans", response_model=list[DigitalHumanOut])
@@ -112,8 +125,11 @@ def create_digital_human(
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> DigitalHuman:
-    _validate_voice(payload.tts_voice)
-    human = DigitalHuman(**payload.model_dump())
+    selected_provider = payload.tts_provider
+    if "tts_provider" not in payload.model_fields_set and payload.tts_voice in settings.guide_tts_voice_values:
+        selected_provider = "dashscope"
+    _validate_voice(selected_provider, payload.tts_voice)
+    human = DigitalHuman(**payload.model_dump(exclude={"tts_provider"}), tts_provider=selected_provider)
     db.add(human)
     try:
         db.commit()
@@ -134,8 +150,10 @@ def update_digital_human(
     if human is None:
         raise _not_found("数字人不存在")
     values = payload.model_dump(exclude_unset=True)
-    if "tts_voice" in values:
-        _validate_voice(str(values["tts_voice"]))
+    selected_provider = str(values.get("tts_provider", human.tts_provider))
+    selected_voice = str(values.get("tts_voice", human.tts_voice))
+    if "tts_voice" in values or "tts_provider" in values:
+        _validate_voice(selected_provider, selected_voice)
     for field, value in values.items():
         setattr(human, field, value)
     try:

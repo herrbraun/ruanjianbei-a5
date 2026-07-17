@@ -33,6 +33,17 @@ class Settings(BaseSettings):
     guide_tts_model: str = "qwen3-tts-instruct-flash"
     tts_voice: str = "Cherry"
     guide_tts_voice_options: str = "Cherry"
+    volcengine_tts_api_key: str = ""
+    doubao_tts_api_key: str = ""
+    volcengine_tts_endpoint: str = "https://openspeech.bytedance.com/api/v3/tts/unidirectional"
+    volcengine_tts_resource_id: str = "seed-tts-2.0"
+    volcengine_tts_model: str = "seed-tts-2.0"
+    volcengine_tts_default_voice: str = "zh_female_vv_uranus_bigtts"
+    volcengine_tts_voice_options: str = (
+        "zh_female_vv_uranus_bigtts|Vivi 2.0（女声）,"
+        "zh_male_dayi_uranus_bigtts|大壹（男声）"
+    )
+    tts_first_chunk_timeout_ms: int = Field(default=4500, ge=500, le=10000)
     tts_instructions: str = "以亲切、清晰、自然的中文景区讲解员语气播报，语速适中。"
     guide_max_audio_bytes: int = 6 * 1024 * 1024
     guide_max_normalized_audio_bytes: int = 7 * 1024 * 1024
@@ -58,6 +69,19 @@ class Settings(BaseSettings):
     def guide_tts_voice_values(self) -> list[str]:
         configured = [voice.strip() for voice in self.guide_tts_voice_options.split(",") if voice.strip()]
         return configured or [self.tts_voice]
+
+    @property
+    def volcengine_tts_voices(self) -> list[tuple[str, str]]:
+        options: list[tuple[str, str]] = []
+        for item in self.volcengine_tts_voice_options.split(","):
+            value, separator, label = item.strip().partition("|")
+            if value:
+                options.append((value, label.strip() if separator and label.strip() else value))
+        return options or [(self.volcengine_tts_default_voice, self.volcengine_tts_default_voice)]
+
+    @property
+    def resolved_volcengine_tts_api_key(self) -> str:
+        return self.volcengine_tts_api_key or self.doubao_tts_api_key
 
     @property
     def uses_json_vector_backend(self) -> bool:

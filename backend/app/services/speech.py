@@ -153,6 +153,7 @@ def recognize_speech(audio: bytes, content_type: str | None) -> RecognizedSpeech
 def synthesize_speech(
     text: str,
     *,
+    model: str | None = None,
     voice: str | None = None,
     instructions: str | None = None,
 ) -> SynthesizedSpeech:
@@ -169,7 +170,7 @@ def synthesize_speech(
                 f"{settings.dashscope_base_url.rstrip('/')}/services/aigc/multimodal-generation/generation",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json={
-                    "model": settings.guide_tts_model,
+                    "model": model or settings.guide_tts_model,
                     "input": {"text": text, "voice": voice or settings.tts_voice, "language_type": "Chinese"},
                     "parameters": {
                         "instructions": instructions or settings.tts_instructions,

@@ -68,6 +68,55 @@ def test_avatar_manifest_rejects_tampered_asset(tmp_path: Path) -> None:
         verify_manifest_assets(manifest, avatars)
 
 
+def test_avatar_seed_assigns_volcengine_voice_by_gender(tmp_path: Path) -> None:
+    content = _valid_glb()
+    avatars = []
+    for index, gender in enumerate(("female", "male")):
+        stored_filename = f"guide-{index}.vrm"
+        (tmp_path / stored_filename).write_bytes(content)
+        avatars.append(
+            {
+                "name": f"语音测试讲解员{index}",
+                "gender": gender,
+                "role_title": "测试",
+                "introduction": "测试人物",
+                "tts_instructions": "自然讲解",
+                "outfit_name": f"测试服装{index}",
+                "version": "v1",
+                "original_filename": stored_filename,
+                "stored_filename": stored_filename,
+                "sha256": content_sha256(content),
+                "file_size": len(content),
+                "is_default": index == 0,
+                "sort_order": index,
+            }
+        )
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(
+        json.dumps({"schema_version": 1, "scenic_code": "lingshan", "avatars": avatars}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    engine = create_engine(
+        "sqlite+pysqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    testing_session = sessionmaker(bind=engine)
+    with testing_session() as db:
+        db.add(ScenicArea(code="lingshan", name="灵山胜境", is_enabled=True))
+        db.commit()
+    seed(manifest, session_factory=testing_session)
+    with testing_session() as db:
+        humans = list(db.scalars(select(DigitalHuman).order_by(DigitalHuman.gender)))
+        assert {human.tts_provider for human in humans} == {"volcengine"}
+        voices = {human.gender: human.tts_voice for human in humans}
+        assert voices["female"] == "zh_female_vv_uranus_bigtts"
+        assert voices["male"] == "zh_male_dayi_uranus_bigtts"
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+
+
 def test_avatar_seed_rolls_back_everything_on_database_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

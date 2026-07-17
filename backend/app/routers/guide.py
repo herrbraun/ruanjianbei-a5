@@ -4,6 +4,8 @@ from collections.abc import Sequence
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -25,7 +27,9 @@ from app.crud.avatar import default_scenic_avatar_config, get_scenic_avatar_conf
 from app.crud.knowledge import get_active_profile, get_scenic_area_by_code, get_scenic_area_by_id
 from app.crud.insights import ensure_pending_insight, process_insight
 from app.crud.routes import get_route_plan
+from app.crud.tts import ensure_tts_provider_settings
 from app.database import get_db
+from app.models.avatar import TtsProviderSetting
 from app.models.guide import GuideFeedback, GuideMessage, GuideSession
 from app.models.user import User
 from app.routers.auth import get_current_user
@@ -43,7 +47,8 @@ from app.schemas.guide import (
 )
 from app.services.guide_answer import GuideAnswerError, generate_guide_answer
 from app.services.retrieval import RetrievalError, search_profile
-from app.services.speech import SpeechError, recognize_speech, synthesize_speech
+from app.services.speech import SpeechError, recognize_speech
+from app.services.streaming_speech import TtsRuntimeConfig, prepare_speech_stream
 
 
 router = APIRouter(prefix="/guide", tags=["guide"])
@@ -375,7 +380,7 @@ async def synthesize_message(
     avatar_variant_id: int | None = Query(default=None),
     current_user: User = Depends(require_visitor),
     db: Session = Depends(get_db),
-) -> Response:
+) -> StreamingResponse:
     message = get_user_assistant_message(db, message_id, current_user.id)
     if message is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guide answer not found")
@@ -389,21 +394,42 @@ async def synthesize_message(
     )
     if avatar_variant_id is not None and avatar_config is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="所选数字人未在当前景区上架")
+    provider_settings = ensure_tts_provider_settings(db)
+    enabled = {item.provider: item for item in provider_settings if item.is_enabled}
+    default_provider = next((item for item in provider_settings if item.is_default and item.is_enabled), None)
+    fallback_provider = next((item for item in provider_settings if item.is_fallback and item.is_enabled), None)
+    human = avatar_config.avatar_variant.digital_human if avatar_config is not None else None
+    selected_provider = enabled.get(human.tts_provider) if human is not None else default_provider
+    if selected_provider is None:
+        selected_provider = default_provider
+    if selected_provider is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="没有可用的语音服务")
+
+    def runtime(item: TtsProviderSetting) -> TtsRuntimeConfig:
+        return TtsRuntimeConfig(
+            provider=item.provider,
+            model=item.model,
+            default_voice=item.default_voice,
+            first_chunk_timeout_ms=item.first_chunk_timeout_ms,
+        )
+
     try:
-        if avatar_config is None:
-            synthesized = await run_in_threadpool(synthesize_speech, message.content)
-        else:
-            human = avatar_config.avatar_variant.digital_human
-            synthesized = await run_in_threadpool(
-                synthesize_speech,
-                message.content,
-                voice=human.tts_voice,
-                instructions=human.tts_instructions,
-            )
+        prepared = await prepare_speech_stream(
+            message.content,
+            primary=runtime(selected_provider),
+            fallback=runtime(fallback_provider) if fallback_provider is not None else None,
+            voice=human.tts_voice if human is not None and selected_provider.provider == human.tts_provider else None,
+            instructions=human.tts_instructions if human is not None else None,
+        )
     except SpeechError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-    return Response(
-        content=synthesized.audio,
-        media_type=synthesized.media_type,
-        headers={"Cache-Control": "no-store"},
+    return StreamingResponse(
+        prepared.chunks,
+        media_type="application/octet-stream",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Audio-Format": "pcm_s16le",
+            "X-Audio-Sample-Rate": str(prepared.sample_rate),
+            "X-TTS-Provider": prepared.provider,
+        },
     )

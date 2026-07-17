@@ -72,6 +72,13 @@ export interface AsrResult {
   duration_ms: number
 }
 
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+
+export function guideSpeechStreamUrl(messageId: number, avatarVariantId?: number) {
+  const query = avatarVariantId ? `?avatar_variant_id=${encodeURIComponent(avatarVariantId)}` : ''
+  return `${apiBaseUrl}/guide/messages/${messageId}/speech${query}`
+}
+
 export type GuideFeedbackTag = 'answer_accurate' | 'voice_natural' | 'avatar_preferred' | 'slow_response' | 'unresolved'
 export interface GuideFeedback { id: number; guide_session_id: number; rating: number; tags: GuideFeedbackTag[]; comment: string | null; created_at: string; updated_at: string }
 
@@ -102,10 +109,4 @@ export const guideApi = {
     form.append('file', file, 'guide-recording.webm')
     return http.post<AsrResult>('/guide/asr', form, { timeout: AI_API_TIMEOUT_MS })
   },
-  synthesize: (messageId: number, avatarVariantId?: number) =>
-    http.post<Blob>(`/guide/messages/${messageId}/speech`, undefined, {
-      params: avatarVariantId ? { avatar_variant_id: avatarVariantId } : undefined,
-      responseType: 'blob',
-      timeout: AI_API_TIMEOUT_MS,
-    }),
 }

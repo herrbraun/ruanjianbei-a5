@@ -1928,6 +1928,125 @@
   padding: 15px 22px;
 }
 
+.tts-provider-section {
+  margin: 22px 0;
+  padding: 22px;
+  border: 1px solid rgba(19, 102, 94, .18);
+  background: linear-gradient(135deg, rgba(235, 248, 244, .9), rgba(255, 252, 243, .96));
+}
+
+.tts-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.tts-provider-card {
+  padding: 18px;
+  border: 1px solid rgba(23, 91, 84, .17);
+  background: rgba(255, 255, 255, .82);
+  box-shadow: 0 12px 30px rgba(31, 74, 68, .06);
+}
+
+.tts-provider-card.primary {
+  border-color: #0f8175;
+  box-shadow: inset 4px 0 #0f8175, 0 12px 30px rgba(31, 74, 68, .08);
+}
+
+.tts-provider-card.unavailable {
+  filter: saturate(.65);
+}
+
+.tts-provider-card header,
+.tts-provider-card header > div,
+.tts-provider-card footer {
+  display: flex;
+  align-items: center;
+}
+
+.tts-provider-card header {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tts-provider-card header > div {
+  gap: 10px;
+}
+
+.tts-provider-card h4,
+.tts-provider-card p {
+  margin: 0;
+}
+
+.tts-provider-card h4 {
+  color: #123f3b;
+  font-size: 17px;
+}
+
+.tts-provider-card p {
+  margin-top: 3px;
+  color: #72827f;
+  font-size: 12px;
+}
+
+.tts-provider-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #0f8175;
+  box-shadow: 0 0 0 5px rgba(15, 129, 117, .12);
+}
+
+.tts-provider-metrics {
+  display: grid;
+  grid-template-columns: .75fr 1.25fr;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.tts-provider-metrics span {
+  min-width: 0;
+  padding: 10px 12px;
+  background: rgba(227, 242, 238, .65);
+}
+
+.tts-provider-metrics small,
+.tts-provider-metrics strong {
+  display: block;
+}
+
+.tts-provider-metrics small {
+  color: #74827f;
+}
+
+.tts-provider-metrics strong {
+  overflow: hidden;
+  margin-top: 4px;
+  color: #164b46;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tts-provider-card footer {
+  justify-content: flex-end;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.tts-provider-card footer .el-switch {
+  margin-right: auto;
+}
+
+@media (max-width: 760px) {
+  .tts-provider-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tts-provider-section {
+    padding: 16px;
+  }
+}
+
 .avatar-control-strip > div:first-child {
   display: flex;
   align-items: center;

@@ -107,7 +107,12 @@ def seed(
                     gender=item.gender,
                     role_title=item.role_title,
                     introduction=item.introduction,
-                    tts_voice=settings.tts_voice,
+                    tts_provider="volcengine",
+                    tts_voice=(
+                        "zh_male_dayi_uranus_bigtts"
+                        if item.gender == "male"
+                        else settings.volcengine_tts_default_voice
+                    ),
                     tts_instructions=item.tts_instructions,
                 )
                 db.add(human)

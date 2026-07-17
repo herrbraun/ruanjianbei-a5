@@ -10,7 +10,7 @@ from app.models.knowledge import (
     ScenicArea,
 )
 from app.models.guide import GuideFeedback, GuideMessage, GuideMessageInsight, GuideSession, InsightReportSchedule, ScenicInsightReport
-from app.models.avatar import AvatarVariant, DigitalHuman, ScenicAvatarConfig
+from app.models.avatar import AvatarVariant, DigitalHuman, ScenicAvatarConfig, TtsProviderSetting
 from app.models.spot import (
     RouteFeedback,
     RoutePlan,
@@ -26,5 +26,5 @@ __all__ = [
     "AdminProfile", "AvatarVariant", "DigitalHuman", "KnowledgeBase", "KnowledgeChunk", "KnowledgeDocument", "KnowledgeEmbedding",
     "GuideFeedback", "GuideMessage", "GuideMessageInsight", "GuideSession", "InsightReportSchedule", "LoginLog", "RagProfile", "RagProfileKnowledgeBase", "RagQueryLog",
     "RouteFeedback", "RoutePlan", "RouteRecommendationSetting", "RouteSpot", "ScenicArea", "ScenicAvatarConfig",
-    "ScenicInsightReport", "ScenicSpot", "SpotMediaAsset", "SpotTag", "User", "VisitorBehaviorRecord", "VisitorProfile",
+    "ScenicInsightReport", "ScenicSpot", "SpotMediaAsset", "SpotTag", "TtsProviderSetting", "User", "VisitorBehaviorRecord", "VisitorProfile",
 ]

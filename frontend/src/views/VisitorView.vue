@@ -6,14 +6,17 @@ import { useRoute, useRouter } from 'vue-router'
 
 import AvatarViewer from '@/components/AvatarViewer.vue'
 import { avatarApi, avatarAssetUrl, type ScenicAvatar } from '@/api/avatar'
-import { guideApi, type GuideFeedbackTag, type GuideMessage, type GuideSource } from '@/api/guide'
+import { guideApi, guideSpeechStreamUrl, type GuideFeedbackTag, type GuideMessage, type GuideSource } from '@/api/guide'
 import { knowledgeApi, type ScenicArea } from '@/api/knowledge'
 import { getRoute } from '@/api/routes'
 import AppLayout from '@/layouts/AppLayout.vue'
+import { StreamingPcmPlayer } from '@/services/streamingPcmPlayer'
+import { useAuthStore } from '@/stores/auth'
 import { useGuideStore } from '@/stores/guide'
 import { useScenicStore } from '@/stores/scenic'
 
 const guideStore = useGuideStore()
+const authStore = useAuthStore()
 const scenicStore = useScenicStore()
 const route = useRoute()
 const router = useRouter()
@@ -55,15 +58,17 @@ let mediaStream: MediaStream | undefined
 let recordedChunks: BlobPart[] = []
 let recordTimer: ReturnType<typeof setInterval> | undefined
 let recordLimitTimer: ReturnType<typeof setTimeout> | undefined
-let audio: HTMLAudioElement | undefined
-let activeAudioUrl: string | undefined
 let playbackGeneration = 0
-let audioContext: AudioContext | undefined
-let audioAnalyser: AnalyserNode | undefined
-let audioSource: MediaElementAudioSourceNode | undefined
-let analysedAudio: HTMLAudioElement | undefined
-let audioAnimationFrame: number | undefined
 let avatarGestureTimer: ReturnType<typeof setTimeout> | undefined
+const pcmPlayer = new StreamingPcmPlayer({
+  onFirstAudio: () => {
+    speechLoadingMessageId.value = undefined
+    if (activeAudioMessageId.value) playingMessageId.value = activeAudioMessageId.value
+    triggerAvatarGesture('guiding', 1_800)
+  },
+  onLevel: (level) => { audioLevel.value = level },
+  onEnded: () => stopAudio(),
+})
 
 const selectedScenicArea = computed(() => scenicAreas.value.find((area) => area.code === selectedScenicCode.value))
 const messages = computed(() => guideStore.messages)
@@ -92,7 +97,7 @@ const avatarMotion = computed<'idle' | 'listening' | 'thinking' | 'speaking' | '
 
 function errorText(error: unknown, fallback: string) {
   const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-  return detail || fallback
+  return detail || (error instanceof Error ? error.message : fallback)
 }
 
 function formatTime(value: string) {
@@ -386,72 +391,12 @@ async function transcribeRecording() {
 
 function stopAudio() {
   playbackGeneration += 1
-  if (audio) {
-    audio.pause()
-  }
-  stopAudioAnalysis()
-  if (activeAudioUrl) URL.revokeObjectURL(activeAudioUrl)
-  audio = undefined
-  activeAudioUrl = undefined
+  pcmPlayer.stop()
   playingMessageId.value = undefined
   speechLoadingMessageId.value = undefined
   activeAudioMessageId.value = undefined
-  clearAvatarGesture()
-}
-
-function stopAudioAnalysis() {
-  pauseAudioAnalysis()
-  audioSource?.disconnect()
-  audioAnalyser?.disconnect()
-  audioSource = undefined
-  audioAnalyser = undefined
-  analysedAudio = undefined
-}
-
-function pauseAudioAnalysis() {
-  if (audioAnimationFrame) cancelAnimationFrame(audioAnimationFrame)
-  audioAnimationFrame = undefined
   audioLevel.value = 0
-}
-
-async function startAudioAnalysis(target: HTMLAudioElement) {
-  pauseAudioAnalysis()
-  const AudioContextConstructor = window.AudioContext || (window as Window & {
-    webkitAudioContext?: typeof AudioContext
-  }).webkitAudioContext
-  if (!AudioContextConstructor) return
-  try {
-    audioContext ||= new AudioContextConstructor()
-    if (analysedAudio !== target || !audioSource || !audioAnalyser) {
-      audioSource?.disconnect()
-      audioAnalyser?.disconnect()
-      audioSource = audioContext.createMediaElementSource(target)
-      audioAnalyser = audioContext.createAnalyser()
-      audioAnalyser.fftSize = 512
-      audioSource.connect(audioAnalyser)
-      audioAnalyser.connect(audioContext.destination)
-      analysedAudio = target
-    }
-    if (audioContext.state === 'suspended') await audioContext.resume()
-    const samples = new Uint8Array(audioAnalyser.fftSize)
-    const sampleAudio = () => {
-      if (!audioAnalyser || target.paused) {
-        audioLevel.value = 0
-        return
-      }
-      audioAnalyser.getByteTimeDomainData(samples)
-      let energy = 0
-      for (const sample of samples) {
-        const normalized = (sample - 128) / 128
-        energy += normalized * normalized
-      }
-      audioLevel.value = Math.min(1, Math.sqrt(energy / samples.length) * 6)
-      audioAnimationFrame = requestAnimationFrame(sampleAudio)
-    }
-    sampleAudio()
-  } catch {
-    stopAudioAnalysis()
-  }
+  clearAvatarGesture()
 }
 
 async function playMessage(message: GuideMessage) {
@@ -459,49 +404,32 @@ async function playMessage(message: GuideMessage) {
     stopAudio()
     return
   }
-  if (activeAudioMessageId.value === message.id && audio) {
-    if (audio.paused) {
+  if (activeAudioMessageId.value === message.id) {
+    if (pcmPlayer.isPaused) {
       try {
-        await audio.play()
+        await pcmPlayer.resume()
         playingMessageId.value = message.id
-        void startAudioAnalysis(audio)
       } catch {
         ElMessage.info('音频已准备好，请点击播放讲解')
       }
       return
     }
-    audio.pause()
+    await pcmPlayer.pause()
     playingMessageId.value = undefined
-    pauseAudioAnalysis()
     return
   }
 
   stopAudio()
   const generation = playbackGeneration
   speechLoadingMessageId.value = message.id
+  activeAudioMessageId.value = message.id
   try {
-    const response = await guideApi.synthesize(message.id, selectedAvatarId.value)
-    if (generation !== playbackGeneration) return
-    activeAudioUrl = URL.createObjectURL(response.data)
-    audio = new Audio(activeAudioUrl)
-    activeAudioMessageId.value = message.id
-    playingMessageId.value = message.id
-    speechLoadingMessageId.value = undefined
-    audio.onended = () => {
-      if (generation === playbackGeneration) stopAudio()
-    }
-    audio.onerror = () => {
-      if (generation === playbackGeneration) stopAudio()
-      ElMessage.error('音频播放失败，请重试')
-    }
-    try {
-      await audio.play()
-      triggerAvatarGesture('guiding', 1_800)
-      void startAudioAnalysis(audio)
-    } catch {
-      playingMessageId.value = undefined
-      ElMessage.info('音频已准备好，点击播放讲解即可收听')
-    }
+    const token = authStore.token || await authStore.recoverGuestSession()
+    await pcmPlayer.play(
+      guideSpeechStreamUrl(message.id, selectedAvatarId.value),
+      token,
+      () => authStore.recoverGuestSession(),
+    )
   } catch (error) {
     if (generation !== playbackGeneration) return
     stopAudio()
@@ -575,6 +503,7 @@ onBeforeUnmount(() => {
   if (mediaRecorder?.state === 'recording') mediaRecorder.stop()
   releaseMicrophone()
   stopAudio()
+  void pcmPlayer.destroy()
   clearAvatarGesture()
 })
 </script>
