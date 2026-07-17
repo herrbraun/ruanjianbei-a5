@@ -55,6 +55,23 @@ let nextBlinkAt = 0
 const headOffsetEuler = new THREE.Euler()
 const headOffsetQuaternion = new THREE.Quaternion()
 
+function improveTextureQuality(vrm: VRM) {
+  if (!renderer) return
+  const anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8)
+  vrm.scene.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return
+    const materials = Array.isArray(object.material) ? object.material : [object.material]
+    for (const material of materials) {
+      for (const value of Object.values(material)) {
+        if (!(value instanceof THREE.Texture)) continue
+        value.anisotropy = anisotropy
+        value.magFilter = THREE.LinearFilter
+        value.needsUpdate = true
+      }
+    }
+  })
+}
+
 function disposeAnimations() {
   animationLoadController?.abort()
   animationLoadController = undefined
@@ -206,7 +223,7 @@ function frameAvatar(vrm: VRM) {
   const horizontalHalfAngle = Math.atan(Math.tan(verticalHalfAngle) * camera.aspect)
   const distanceForHeight = size.y / (2 * Math.tan(verticalHalfAngle))
   const distanceForWidth = size.x / (2 * Math.tan(horizontalHalfAngle))
-  const distance = Math.max(distanceForHeight, distanceForWidth) * 1.18
+  const distance = Math.max(distanceForHeight, distanceForWidth) * 1.08
 
   camera.position.set(center.x, targetY, bounds.max.z + distance)
   camera.lookAt(center.x, targetY, center.z)
@@ -260,6 +277,7 @@ async function loadVrm() {
     // every guide face away from the visitor.
     currentVrm.scene.rotation.y = 0
     currentVrm.scene.position.set(0, 0, 0)
+    improveTextureQuality(currentVrm)
     prepareGuidePose(currentVrm)
     scene.add(currentVrm.scene)
     frameAvatar(currentVrm)
@@ -327,7 +345,12 @@ onMounted(() => {
   if (!mountElement.value) return
   try {
     renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    // The stage is intentionally compact on mobile. A minimum 2x backing
+    // buffer keeps faces, hair and clothing edges sharp even on 1x displays.
+    renderer.setPixelRatio(THREE.MathUtils.clamp(window.devicePixelRatio || 1, 2, 2.5))
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.08
     mountElement.value.appendChild(renderer.domElement)
     scene = new THREE.Scene()
     camera = new THREE.PerspectiveCamera(24, 1, 0.1, 100)
