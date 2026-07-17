@@ -29,6 +29,10 @@ class AdminLoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=100)
 
 
+class GuestSessionRequest(BaseModel):
+    guest_key: str | None = Field(default=None, min_length=1, max_length=256)
+
+
 class ProfileUpdateRequest(BaseModel):
     nickname: str | None = Field(default=None, min_length=1, max_length=100)
     interests: list[str] | None = Field(default=None, min_length=1, max_length=8)
@@ -82,9 +86,14 @@ class UserInfo(BaseModel):
     interest: str | None = None
     interests: list[str] = Field(default_factory=list)
     needs_interest_setup: bool = False
+    is_guest: bool = False
 
 
 class AuthResponse(BaseModel):
     access_token: str
     token_type: str
     user: UserInfo
+
+
+class GuestAuthResponse(AuthResponse):
+    guest_key: str | None = None

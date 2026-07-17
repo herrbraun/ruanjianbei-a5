@@ -3,14 +3,16 @@ import { ChatDotRound, Check, Location, MapLocation, Timer } from '@element-plus
 import { ElMessage } from 'element-plus'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 
-import { getInterestOptions } from '@/api/auth'
+import { getInterestOptions, updateProfile } from '@/api/auth'
 import { getSpots, type ScenicSpot } from '@/api/spots'
 import { recommendRoute, submitRouteFeedback, type RoutePlan, type RoutePreference } from '@/api/routes'
 import InterestSelector from '@/components/InterestSelector.vue'
 import AppLayout from '@/layouts/AppLayout.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useScenicStore } from '@/stores/scenic'
 
 const authStore = useAuthStore()
+const scenicStore = useScenicStore()
 const loading = ref(false)
 const spotLoading = ref(false)
 const feedbackLoading = ref(false)
@@ -29,7 +31,9 @@ async function loadSpots() {
   spotLoading.value = true
   try {
     spots.value = (await getSpots()).data
-    if (!form.scenic_area) form.scenic_area = scenicAreas.value[0] || ''
+    if (!form.scenic_area) form.scenic_area = scenicAreas.value.includes(scenicStore.selectedName)
+      ? scenicStore.selectedName
+      : scenicAreas.value[0] || ''
   }
   catch { ElMessage.error('起点列表加载失败，请刷新页面重试') }
   finally { spotLoading.value = false }
@@ -38,7 +42,6 @@ async function loadSpots() {
 async function loadInterests() {
   try {
     interestOptions.value = (await getInterestOptions()).data.interests
-    if (!selectedInterests.value.length && interestOptions.value.length) selectedInterests.value = [interestOptions.value[0]]
   } catch { ElMessage.error('兴趣标签加载失败，请刷新页面重试') }
 }
 
@@ -47,6 +50,12 @@ async function createRoute() {
   feedbackSubmitted.value = false
   try {
     routePlan.value = (await recommendRoute({ scenic_area: form.scenic_area, interest: selectedInterests.value.join(','), duration_minutes: form.duration_minutes, start_spot_id: form.start_spot_id, preference: form.preference })).data
+    try {
+      const profile = await updateProfile({ interests: selectedInterests.value })
+      authStore.setUser(profile.data)
+    } catch {
+      ElMessage.warning('路线已生成，但兴趣偏好暂未保存')
+    }
     ElMessage.success('路线已生成')
   } catch { ElMessage.error('路线生成失败，请检查起点或增加游玩时长') }
   finally { loading.value = false }

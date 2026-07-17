@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import secrets
 import string
+from collections import defaultdict, deque
+from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 from pathlib import Path
+from threading import Lock
+from time import monotonic
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
@@ -14,12 +19,15 @@ from sqlalchemy.orm import Session
 from app.core.security import create_access_token, decode_access_token, verify_password
 from app.crud.user import (
     add_login_log,
+    create_guest_visitor,
     create_visitor,
+    get_guest_by_key_hash,
     get_user_by_id,
     get_user_by_username,
     update_avatar,
     update_password,
     update_visitor_profile,
+    touch_guest,
 )
 from app.database import get_db
 from app.models.spot import SpotTag
@@ -27,6 +35,8 @@ from app.models.user import User
 from app.schemas.auth import (
     AdminLoginRequest,
     AuthResponse,
+    GuestAuthResponse,
+    GuestSessionRequest,
     InterestOptionsResponse,
     PasswordChangeRequest,
     ProfileUpdateRequest,
@@ -41,6 +51,11 @@ bearer_scheme = HTTPBearer(auto_error=False)
 avatar_directory = Path(__file__).resolve().parents[2] / "uploads" / "avatars"
 avatar_directory.mkdir(parents=True, exist_ok=True)
 username_suffix_alphabet = string.ascii_lowercase + string.digits
+guest_recovery_days = 30
+guest_creation_limit = 10
+guest_creation_window_seconds = 60 * 60
+guest_creation_attempts: dict[str, deque[float]] = defaultdict(deque)
+guest_creation_lock = Lock()
 
 
 def parse_interests(user: User) -> list[str]:
@@ -61,6 +76,7 @@ def build_user_info(user: User) -> UserInfo:
         interest=",".join(interests) or None,
         interests=interests,
         needs_interest_setup=user.role == "visitor" and not interests,
+        is_guest=user.is_guest,
     )
 
 
@@ -74,6 +90,40 @@ def get_client_ip(request: Request) -> str | None:
     if forwarded_for:
         return forwarded_for.split(",")[0].strip()
     return request.client.host if request.client else None
+
+
+def hash_guest_key(guest_key: str) -> str:
+    return sha256(guest_key.encode("utf-8")).hexdigest()
+
+
+def allow_guest_creation(ip_address: str | None) -> bool:
+    key = ip_address or "unknown"
+    now = monotonic()
+    with guest_creation_lock:
+        if len(guest_creation_attempts) >= 1024:
+            stale_keys = [
+                item_key
+                for item_key, item_attempts in guest_creation_attempts.items()
+                if not item_attempts or now - item_attempts[-1] >= guest_creation_window_seconds
+            ]
+            for stale_key in stale_keys:
+                guest_creation_attempts.pop(stale_key, None)
+        attempts = guest_creation_attempts[key]
+        while attempts and now - attempts[0] >= guest_creation_window_seconds:
+            attempts.popleft()
+        if len(attempts) >= guest_creation_limit:
+            return False
+        attempts.append(now)
+        return True
+
+
+def guest_is_recoverable(user: User, now: datetime) -> bool:
+    if user.guest_expires_at is None:
+        return False
+    expires_at = user.guest_expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at > now
 
 
 def generate_username_suggestions(db: Session, username: str) -> list[str]:
@@ -127,7 +177,7 @@ def require_visitor(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
-@router.get("/username-availability", response_model=UsernameAvailabilityResponse)
+@router.get("/username-availability", response_model=UsernameAvailabilityResponse, include_in_schema=False)
 def username_availability(
     username: str = Query(min_length=3, max_length=32, pattern=r"^[A-Za-z0-9_]{3,32}$"),
     db: Session = Depends(get_db),
@@ -139,7 +189,40 @@ def username_availability(
     )
 
 
-@router.post("/visitor-register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/guest-session", response_model=GuestAuthResponse)
+def guest_session(
+    payload: GuestSessionRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> GuestAuthResponse:
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=guest_recovery_days)
+    if payload.guest_key:
+        user = get_guest_by_key_hash(db, hash_guest_key(payload.guest_key))
+        if user is not None and guest_is_recoverable(user, now):
+            user = touch_guest(db, user, expires_at=expires_at, last_seen_at=now)
+            auth = issue_auth_response(user)
+            return GuestAuthResponse(**auth.model_dump(), guest_key=None)
+
+    if not allow_guest_creation(get_client_ip(request)):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="匿名游客创建过于频繁，请稍后再试",
+            headers={"Retry-After": str(guest_creation_window_seconds)},
+        )
+    guest_key = secrets.token_urlsafe(32)
+    user = create_guest_visitor(
+        db,
+        guest_key_hash=hash_guest_key(guest_key),
+        nickname=f"匿名游客 {guest_key[-4:].upper()}",
+        expires_at=expires_at,
+        last_seen_at=now,
+    )
+    auth = issue_auth_response(user)
+    return GuestAuthResponse(**auth.model_dump(), guest_key=guest_key)
+
+
+@router.post("/visitor-register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def visitor_register(
     payload: VisitorRegisterRequest,
     request: Request,
@@ -170,7 +253,7 @@ def visitor_register(
     return issue_auth_response(user)
 
 
-@router.post("/visitor-login", response_model=AuthResponse)
+@router.post("/visitor-login", response_model=AuthResponse, include_in_schema=False)
 def visitor_login(payload: VisitorLoginRequest, request: Request, db: Session = Depends(get_db)) -> AuthResponse:
     user = get_user_by_username(db, payload.username)
     if user is None or user.role != "visitor" or not user.password_hash:
@@ -227,7 +310,7 @@ def update_me(
     return build_user_info(user)
 
 
-@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT, include_in_schema=False)
 def change_password(
     payload: PasswordChangeRequest,
     current_user: User = Depends(require_visitor),
@@ -251,7 +334,7 @@ def detect_image_extension(content: bytes) -> str | None:
     return None
 
 
-@router.post("/avatar", response_model=UserInfo)
+@router.post("/avatar", response_model=UserInfo, include_in_schema=False)
 async def upload_avatar(
     file: UploadFile = File(...),
     current_user: User = Depends(require_visitor),

@@ -14,7 +14,12 @@ from app.crud.avatar import create_scenic_avatar_config
 from app.crud.knowledge import get_scenic_area_by_code
 from app.database import SessionLocal
 from app.models.avatar import AvatarVariant, DigitalHuman, ScenicAvatarConfig
-from app.services.avatar_storage import content_sha256, save_vrm_upload, validate_vrm_upload
+from app.services.avatar_storage import (
+    AVATAR_UPLOAD_DIRECTORY,
+    content_sha256,
+    save_vrm_upload,
+    validate_vrm_upload,
+)
 
 
 SEED_AVATARS = (
@@ -29,6 +34,19 @@ SEED_AVATARS = (
     ("陈乐川", "male", "亲子互动讲解员", "以活泼、耐心的语气面向亲子游客说明互动体验。", "Lingshan Family Guide.vrm", "亲子活力装"),
     ("顾承文", "male", "遗产文化讲解员", "以庄重、平和的语气讲解文化遗产与参观礼仪。", "Lingshan Heritage Guide.vrm", "遗产正式装"),
 )
+
+
+def find_existing_upload(content: bytes) -> str | None:
+    """Reuse a tracked VRM with identical content instead of duplicating it."""
+    if not AVATAR_UPLOAD_DIRECTORY.exists():
+        return None
+    expected_hash = content_sha256(content)
+    for candidate in AVATAR_UPLOAD_DIRECTORY.glob("*.vrm"):
+        if candidate.stat().st_size != len(content):
+            continue
+        if content_sha256(candidate.read_bytes()) == expected_hash:
+            return candidate.name
+    return None
 
 
 def seed(source: Path, scenic_code: str) -> None:
@@ -63,12 +81,13 @@ def seed(source: Path, scenic_code: str) -> None:
                     raise SystemExit(f"缺少模型文件：{source_path}")
                 content = source_path.read_bytes()
                 validate_vrm_upload(content, filename)
+                stored_filename = find_existing_upload(content) or save_vrm_upload(content)
                 variant = AvatarVariant(
                     digital_human_id=human.id,
                     outfit_name=outfit_name,
                     version="v1",
                     original_filename=filename,
-                    stored_filename=save_vrm_upload(content),
+                    stored_filename=stored_filename,
                     content_hash=content_sha256(content),
                     file_size=len(content),
                 )

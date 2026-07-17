@@ -11,8 +11,10 @@ import { knowledgeApi, type ScenicArea } from '@/api/knowledge'
 import { getRoute } from '@/api/routes'
 import AppLayout from '@/layouts/AppLayout.vue'
 import { useGuideStore } from '@/stores/guide'
+import { useScenicStore } from '@/stores/scenic'
 
 const guideStore = useGuideStore()
+const scenicStore = useScenicStore()
 const route = useRoute()
 const router = useRouter()
 const scenicAreas = ref<ScenicArea[]>([])
@@ -114,7 +116,12 @@ async function loadScenicAreas() {
   loadingAreas.value = true
   try {
     scenicAreas.value = (await knowledgeApi.listPublicScenicAreas()).data
-    selectedScenicCode.value = scenicAreas.value[0]?.code || ''
+    const requestedCode = typeof route.query.scenic_code === 'string' ? route.query.scenic_code : scenicStore.selectedCode
+    selectedScenicCode.value = scenicAreas.value.some((area) => area.code === requestedCode)
+      ? requestedCode
+      : scenicAreas.value[0]?.code || ''
+    const selected = scenicAreas.value.find((area) => area.code === selectedScenicCode.value)
+    if (selected) scenicStore.select(selected)
   } catch (error) {
     ElMessage.error(errorText(error, '景区列表加载失败'))
   } finally {
@@ -194,6 +201,8 @@ async function startGuide(routePlanId?: number, currentSpotId?: number) {
     return
   }
   requestAvatarWelcome()
+  const selected = scenicAreas.value.find((area) => area.code === selectedScenicCode.value)
+  if (selected) scenicStore.select(selected)
   guideStarted.value = true
   await Promise.all([openGuideSession(routePlanId, currentSpotId), loadScenicAvatars()])
   if (!guideStore.activeSession) {
@@ -246,7 +255,15 @@ async function initializeGuidePage() {
   await loadScenicAreas()
   const routePlanId = Number(route.query.route_id)
   const currentSpotId = Number(route.query.spot_id)
-  if (!Number.isInteger(routePlanId) || !Number.isInteger(currentSpotId) || routePlanId <= 0 || currentSpotId <= 0) return
+  if (!Number.isInteger(routePlanId) || !Number.isInteger(currentSpotId) || routePlanId <= 0 || currentSpotId <= 0) {
+    if (typeof route.query.scenic_code === 'string' && scenicAreas.value.some((area) => area.code === route.query.scenic_code)) {
+      await startGuide()
+      if (guideStore.activeSession && route.query.start === '1') {
+        await router.replace({ path: route.path, query: { scenic_code: selectedScenicCode.value } })
+      }
+    }
+    return
+  }
   try {
     const routePlan = (await getRoute(routePlanId)).data
     const scenicArea = scenicAreas.value.find((area) => area.name === routePlan.scenic_area)
@@ -268,8 +285,9 @@ async function returnToScenicSelection() {
   clearAvatarGesture()
   routeActionLoading.value = false
   guideStore.closeActiveGuide()
+  scenicStore.clear()
   guideStarted.value = false
-  await router.replace({ path: route.path })
+  await router.push('/')
 }
 
 async function sendQuestion() {

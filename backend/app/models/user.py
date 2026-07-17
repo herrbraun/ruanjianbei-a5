@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -21,6 +21,10 @@ class User(Base):
     nickname: Mapped[str | None] = mapped_column(String(100), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
+    is_guest: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    guest_key_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
+    guest_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

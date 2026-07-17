@@ -13,13 +13,12 @@ import {
   User,
   UserFilled,
 } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import { computed, onMounted, ref, type Component } from 'vue'
+import { computed, ref, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import { getInterestOptions, resolveAssetUrl, updateProfile } from '@/api/auth'
-import InterestSelector from '@/components/InterestSelector.vue'
+import { resolveAssetUrl } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
+import { useScenicStore } from '@/stores/scenic'
 
 defineProps<{
   title: string
@@ -36,16 +35,11 @@ interface NavigationItem {
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const scenicStore = useScenicStore()
 const drawerVisible = ref(false)
-const interestDialogVisible = ref(false)
-const interestLoading = ref(false)
-const interestSaving = ref(false)
-const interestLoadError = ref(false)
-const interestOptions = ref<string[]>([])
-const selectedInterests = ref<string[]>([])
 
 const displayName = computed(() => authStore.user?.nickname || authStore.user?.username || '未命名用户')
-const roleName = computed(() => (authStore.user?.role === 'admin' ? '景区管理员' : '游客'))
+const roleName = computed(() => (authStore.user?.role === 'admin' ? '景区管理员' : '匿名游客'))
 const avatarUrl = computed(() => resolveAssetUrl(authStore.user?.avatar_url))
 const navigation = computed<NavigationItem[]>(() => {
   if (authStore.user?.role === 'admin') {
@@ -65,7 +59,6 @@ const navigation = computed<NavigationItem[]>(() => {
     { label: '景点浏览', to: '/visitor/spots', icon: Location },
     { label: '路线推荐', to: '/visitor/routes', icon: MapLocation },
     { label: '智能导览', to: '/visitor/guide', icon: ChatDotRound },
-    { label: '账号管理', to: '/visitor/account', icon: User },
   ]
 })
 
@@ -83,46 +76,14 @@ function navigate(item: NavigationItem) {
 
 function logout() {
   drawerVisible.value = false
-  authStore.logout()
-  router.push('/login')
+  authStore.logout(true)
+  router.push('/')
 }
 
-async function loadInterestOptions() {
-  interestLoading.value = true
-  interestLoadError.value = false
-  try {
-    interestOptions.value = (await getInterestOptions()).data.interests
-  } catch {
-    interestLoadError.value = true
-  } finally {
-    interestLoading.value = false
-  }
+function switchScenicArea() {
+  drawerVisible.value = false
+  router.push('/')
 }
-
-async function saveInitialInterests() {
-  if (!selectedInterests.value.length) {
-    ElMessage.warning('请至少选择一个兴趣标签')
-    return
-  }
-  interestSaving.value = true
-  try {
-    const response = await updateProfile({ interests: selectedInterests.value })
-    authStore.setUser(response.data)
-    interestDialogVisible.value = false
-    ElMessage.success('兴趣偏好已保存')
-  } catch {
-    ElMessage.error('兴趣偏好保存失败，请重试')
-  } finally {
-    interestSaving.value = false
-  }
-}
-
-onMounted(async () => {
-  if (authStore.user?.role !== 'visitor' || !authStore.user.needs_interest_setup) return
-  selectedInterests.value = [...authStore.user.interests]
-  interestDialogVisible.value = true
-  await loadInterestOptions()
-})
 </script>
 
 <template>
@@ -149,10 +110,15 @@ onMounted(async () => {
         </button>
       </nav>
 
-      <div class="sidebar-account">
+      <div v-if="authStore.user?.role === 'admin'" class="sidebar-account">
         <div class="account-avatar" aria-hidden="true"><img v-if="avatarUrl" :src="avatarUrl" alt=""><el-icon v-else><User /></el-icon></div>
         <div><strong>{{ displayName }}</strong><span>{{ roleName }}</span></div>
         <el-button :icon="SwitchButton" text circle aria-label="退出登录" title="退出登录" @click="logout" />
+      </div>
+      <div v-else class="sidebar-account visitor-scenic-account">
+        <div class="account-avatar" aria-hidden="true"><el-icon><Location /></el-icon></div>
+        <div><strong>{{ scenicStore.selectedName || '当前景区' }}</strong><span>匿名游览模式</span></div>
+        <el-button :icon="SwitchButton" text circle aria-label="切换景区" title="切换景区" @click="switchScenicArea" />
       </div>
     </aside>
 
@@ -186,18 +152,9 @@ onMounted(async () => {
             <el-icon><component :is="item.icon" /></el-icon><span>{{ item.label }}</span>
           </button>
         </nav>
-        <div class="sidebar-account"><div class="account-avatar" aria-hidden="true"><img v-if="avatarUrl" :src="avatarUrl" alt=""><el-icon v-else><User /></el-icon></div><div><strong>{{ displayName }}</strong><span>{{ roleName }}</span></div><el-button :icon="SwitchButton" text circle aria-label="退出登录" @click="logout" /></div>
+        <div v-if="authStore.user?.role === 'admin'" class="sidebar-account"><div class="account-avatar" aria-hidden="true"><img v-if="avatarUrl" :src="avatarUrl" alt=""><el-icon v-else><User /></el-icon></div><div><strong>{{ displayName }}</strong><span>{{ roleName }}</span></div><el-button :icon="SwitchButton" text circle aria-label="退出登录" @click="logout" /></div>
+        <div v-else class="sidebar-account visitor-scenic-account"><div class="account-avatar" aria-hidden="true"><el-icon><Location /></el-icon></div><div><strong>{{ scenicStore.selectedName || '当前景区' }}</strong><span>匿名游览模式</span></div><el-button :icon="SwitchButton" text circle aria-label="切换景区" @click="switchScenicArea" /></div>
       </div>
     </el-drawer>
-
-    <el-dialog v-model="interestDialogVisible" class="interest-onboarding-dialog" width="min(92vw, 620px)" :show-close="false" :close-on-click-modal="false" :close-on-press-escape="false" :append-to-body="true">
-      <template #header><div class="dialog-heading"><span>完善首次设置</span><h2>选择你感兴趣的内容</h2><p>这些标签会用于景点筛选和路线推荐，之后可在账号管理中修改。</p></div></template>
-      <div v-loading="interestLoading">
-        <el-alert v-if="interestLoadError" title="兴趣标签加载失败" type="error" :closable="false" show-icon><template #default><el-button text type="primary" @click="loadInterestOptions">重新加载</el-button></template></el-alert>
-        <InterestSelector v-else v-model="selectedInterests" :options="interestOptions" :disabled="interestSaving" />
-        <p class="selection-count">已选择 {{ selectedInterests.length }} / 8</p>
-      </div>
-      <template #footer><el-button type="primary" :loading="interestSaving" :disabled="interestLoadError || !selectedInterests.length" @click="saveInitialInterests">保存并开始游览</el-button></template>
-    </el-dialog>
   </div>
 </template>

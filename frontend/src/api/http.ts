@@ -1,8 +1,9 @@
-import axios from 'axios'
+import axios, { type InternalAxiosRequestConfig } from 'axios'
 
 import { DEFAULT_API_TIMEOUT_MS } from './timeouts'
 
-type UnauthorizedHandler = () => void
+type RetryableRequestConfig = InternalAxiosRequestConfig & { _guestRetried?: boolean }
+type UnauthorizedHandler = () => Promise<string | null> | string | null
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 let unauthorizedHandler: UnauthorizedHandler | null = null
@@ -26,9 +27,17 @@ http.interceptors.request.use((config) => {
 
 http.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (axios.isAxiosError(error) && error.response?.status === 401) {
-      unauthorizedHandler?.()
+  async (error) => {
+    if (axios.isAxiosError(error) && error.response?.status === 401 && error.config) {
+      const config = error.config as RetryableRequestConfig
+      if (!config._guestRetried && unauthorizedHandler) {
+        config._guestRetried = true
+        const replacementToken = await unauthorizedHandler()
+        if (replacementToken) {
+          config.headers.Authorization = `Bearer ${replacementToken}`
+          return http.request(config)
+        }
+      }
     }
     return Promise.reject(error)
   },

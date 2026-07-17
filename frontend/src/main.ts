@@ -16,11 +16,20 @@ const pinia = createPinia()
 app.use(pinia)
 
 const authStore = useAuthStore(pinia)
-setUnauthorizedHandler(() => {
-  authStore.logout()
-  if (router.currentRoute.value.name !== 'login') {
-    void router.replace('/login')
+setUnauthorizedHandler(async () => {
+  const currentRoute = router.currentRoute.value
+  if (currentRoute.path.startsWith('/visitor')) {
+    try {
+      return await authStore.recoverGuestSession()
+    } catch {
+      authStore.logout(true)
+      await router.replace('/')
+      return null
+    }
   }
+  authStore.logout(true)
+  if (currentRoute.path.startsWith('/admin') && currentRoute.name !== 'admin-login') await router.replace('/admin/login')
+  return null
 })
 
 app.use(router)

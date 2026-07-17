@@ -18,27 +18,15 @@
 
 后端默认地址：`http://localhost:8000/api`
 
-## 游客注册与登录
+## 匿名游客会话
 
-`POST /auth/visitor-register`
+`POST /auth/guest-session`
 
-首次注册提交账号和密码，成功后直接返回 JWT 和用户信息；账号占用时返回 `409`，`detail.suggestions` 提供三个可选账号。
-
-```json
-{
-  "username": "visitor001",
-  "password": "password123"
-}
-```
-
-`POST /auth/visitor-login`
-
-请求：
+游客端无需账号密码。首次请求提交空对象，后端创建独立匿名游客并返回恢复密钥；同一浏览器后续携带恢复密钥，可在 30 天滑动有效期内恢复原游客身份。恢复密钥只保存在浏览器，数据库仅保存 SHA-256 哈希。新身份创建按客户端 IP 限制为每小时 10 次。
 
 ```json
 {
-  "username": "visitor001",
-  "password": "password123"
+  "guest_key": "首次请求可省略，恢复时传入"
 }
 ```
 
@@ -51,15 +39,19 @@
   "user": {
     "id": 2,
     "role": "visitor",
-    "nickname": "visitor001",
-    "username": "visitor001",
+    "nickname": "匿名游客 A7F2",
+    "username": null,
     "avatar_url": null,
     "interest": null,
     "interests": [],
-    "needs_interest_setup": true
-  }
+    "needs_interest_setup": true,
+    "is_guest": true
+  },
+  "guest_key": "仅创建或轮换身份时返回"
 }
 ```
+
+历史游客注册、登录和账号资料接口仅保留兼容实现，不再出现在公开 OpenAPI 或游客前端中。
 
 ## 管理员登录
 
@@ -102,13 +94,8 @@ Authorization: Bearer <jwt-token>
 
 返回当前登录用户信息。
 
-账号相关接口：
-
-- `GET /auth/username-availability?username={账号}`：检查账号并返回可选账号。
 - `GET /auth/interests`：读取可选兴趣标签。
-- `PATCH /auth/me`：修改昵称和兴趣标签。
-- `POST /auth/change-password`：验证原密码并修改密码。
-- `POST /auth/avatar`：上传 PNG、JPEG 或 WebP 头像，最大 5 MB。
+- `PATCH /auth/me`：保存匿名游客在路线页按需选择的兴趣标签。
 
 ## 景点与路线
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -26,6 +28,50 @@ def create_visitor(db: Session, username: str, password: str) -> User:
     db.add(user)
     db.flush()
     db.add(VisitorProfile(user_id=user.id, interest=None))
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def create_guest_visitor(
+    db: Session,
+    *,
+    guest_key_hash: str,
+    nickname: str,
+    expires_at: datetime,
+    last_seen_at: datetime,
+) -> User:
+    user = User(
+        username=None,
+        password_hash=None,
+        nickname=nickname,
+        role="visitor",
+        is_guest=True,
+        guest_key_hash=guest_key_hash,
+        guest_expires_at=expires_at,
+        last_seen_at=last_seen_at,
+    )
+    db.add(user)
+    db.flush()
+    db.add(VisitorProfile(user_id=user.id, interest=None))
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def get_guest_by_key_hash(db: Session, guest_key_hash: str) -> User | None:
+    return db.scalar(
+        select(User).where(
+            User.role == "visitor",
+            User.is_guest.is_(True),
+            User.guest_key_hash == guest_key_hash,
+        )
+    )
+
+
+def touch_guest(db: Session, user: User, *, expires_at: datetime, last_seen_at: datetime) -> User:
+    user.guest_expires_at = expires_at
+    user.last_seen_at = last_seen_at
     db.commit()
     db.refresh(user)
     return user

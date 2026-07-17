@@ -11,6 +11,7 @@ export interface UserInfo {
   interest: string | null
   interests: string[]
   needs_interest_setup: boolean
+  is_guest: boolean
 }
 
 export interface AuthResponse {
@@ -19,31 +20,16 @@ export interface AuthResponse {
   user: UserInfo
 }
 
-export interface UsernameAvailability {
-  available: boolean
-  suggestions: string[]
+export interface GuestAuthResponse extends AuthResponse {
+  guest_key: string | null
 }
 
-export interface UsernameConflictDetail {
-  code: 'username_taken'
-  message: string
-  suggestions: string[]
-}
-
-export function visitorRegister(payload: { username: string; password: string }) {
-  return http.post<AuthResponse>('/auth/visitor-register', payload)
-}
-
-export function visitorLogin(payload: { username: string; password: string }) {
-  return http.post<AuthResponse>('/auth/visitor-login', payload)
+export function createGuestSession(guestKey?: string) {
+  return http.post<GuestAuthResponse>('/auth/guest-session', { guest_key: guestKey })
 }
 
 export function adminLogin(payload: { username: string; password: string }) {
   return http.post<AuthResponse>('/auth/admin-login', payload)
-}
-
-export function checkUsernameAvailability(username: string) {
-  return http.get<UsernameAvailability>('/auth/username-availability', { params: { username } })
 }
 
 export function getInterestOptions() {
@@ -56,16 +42,6 @@ export function getCurrentUser() {
 
 export function updateProfile(payload: { nickname?: string; interests?: string[] }) {
   return http.patch<UserInfo>('/auth/me', payload)
-}
-
-export function changePassword(payload: { current_password: string; new_password: string }) {
-  return http.post<void>('/auth/change-password', payload)
-}
-
-export function uploadAvatar(file: File) {
-  const data = new FormData()
-  data.append('file', file)
-  return http.post<UserInfo>('/auth/avatar', data)
 }
 
 export function resolveAssetUrl(path: string | null | undefined) {

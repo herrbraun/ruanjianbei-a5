@@ -217,8 +217,12 @@ function rendererSize() {
   if (!renderer || !camera || !mountElement.value) return
   const { width, height } = mountElement.value.getBoundingClientRect()
   if (!width || !height) return
-  renderer.setSize(width, height, false)
-  camera.aspect = width / height
+  // Guard against a cyclic percentage-height layout turning the canvas into
+  // an enormous WebGL buffer before responsive styles have settled.
+  const safeWidth = Math.min(Math.round(width), 4096)
+  const safeHeight = Math.min(Math.round(height), 4096)
+  renderer.setSize(safeWidth, safeHeight, false)
+  camera.aspect = safeWidth / safeHeight
   camera.updateProjectionMatrix()
   if (currentVrm) frameAvatar(currentVrm)
 }
@@ -373,7 +377,8 @@ onBeforeUnmount(() => {
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: 360px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .avatar-viewer :deep(canvas) {

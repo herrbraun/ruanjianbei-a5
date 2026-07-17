@@ -11,13 +11,23 @@ CREATE TABLE IF NOT EXISTS users (
     nickname VARCHAR(100),
     avatar_url VARCHAR(500),
     role VARCHAR(20) NOT NULL CHECK (role IN ('visitor', 'admin')),
+    is_guest BOOLEAN NOT NULL DEFAULT FALSE,
+    guest_key_hash VARCHAR(64),
+    guest_expires_at TIMESTAMPTZ,
+    last_seen_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_guest BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS guest_key_hash VARCHAR(64);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS guest_expires_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS ix_users_id ON users (id);
 CREATE INDEX IF NOT EXISTS ix_users_username ON users (username);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_users_username_lower ON users (LOWER(username)) WHERE username IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ix_users_guest_key_hash ON users (guest_key_hash);
+CREATE INDEX IF NOT EXISTS ix_users_guest_expires_at ON users (guest_expires_at);
 
 CREATE TABLE IF NOT EXISTS visitor_profiles (
     id SERIAL PRIMARY KEY,

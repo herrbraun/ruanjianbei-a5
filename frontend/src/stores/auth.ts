@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 
-import { adminLogin, getCurrentUser, type AuthResponse, type Role, type UserInfo, visitorLogin, visitorRegister } from '@/api/auth'
+import { adminLogin, createGuestSession, getCurrentUser, type AuthResponse, type Role, type UserInfo } from '@/api/auth'
 
 interface AuthState {
   token: string | null
@@ -9,6 +9,14 @@ interface AuthState {
 }
 
 let sessionInitialization: Promise<void> | null = null
+let guestInitialization: Promise<AuthResponse> | null = null
+
+function clearVisitorSessionReferences() {
+  for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+    const key = localStorage.key(index)
+    if (key?.startsWith('guide_session:')) localStorage.removeItem(key)
+  }
+}
 
 function readStoredUser(): UserInfo | null {
   const raw = localStorage.getItem('auth_user')
@@ -46,14 +54,6 @@ export const useAuthStore = defineStore('auth', {
       this.user = user
       localStorage.setItem('auth_user', JSON.stringify(user))
     },
-    async registerVisitor(payload: { username: string; password: string }) {
-      const response = await visitorRegister(payload)
-      this.setSession(response.data)
-    },
-    async loginVisitor(payload: { username: string; password: string }) {
-      const response = await visitorLogin(payload)
-      this.setSession(response.data)
-    },
     async loginAdmin(payload: { username: string; password: string }) {
       const response = await adminLogin(payload)
       this.setSession(response.data)
@@ -81,11 +81,35 @@ export const useAuthStore = defineStore('auth', {
       }
       await sessionInitialization
     },
-    logout() {
+    async ensureGuestSession() {
+      if (this.isAuthenticated && this.user?.role === 'visitor') return { access_token: this.token!, token_type: 'bearer' as const, user: this.user }
+      if (this.user?.role === 'admin') throw new Error('Administrator session is active')
+      if (!guestInitialization) {
+        const previousGuestKey = localStorage.getItem('guest_key') || undefined
+        guestInitialization = createGuestSession(previousGuestKey)
+          .then((response) => {
+            if (response.data.guest_key) {
+              if (!previousGuestKey || previousGuestKey !== response.data.guest_key) clearVisitorSessionReferences()
+              localStorage.setItem('guest_key', response.data.guest_key)
+            }
+            this.setSession(response.data)
+            return response.data
+          })
+          .finally(() => { guestInitialization = null })
+      }
+      return guestInitialization
+    },
+    async recoverGuestSession() {
+      this.logout(true)
+      const session = await this.ensureGuestSession()
+      return session.access_token
+    },
+    logout(preserveGuestKey = true) {
       this.token = null
       this.user = null
       localStorage.removeItem('auth_token')
       localStorage.removeItem('auth_user')
+      if (!preserveGuestKey) localStorage.removeItem('guest_key')
       this.sessionInitialized = true
     },
   },

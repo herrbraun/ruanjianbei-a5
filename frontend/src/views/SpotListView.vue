@@ -6,14 +6,16 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { getSpots, type ScenicSpot, type SpotType } from '@/api/spots'
 import AppLayout from '@/layouts/AppLayout.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useScenicStore } from '@/stores/scenic'
 
 const authStore = useAuthStore()
+const scenicStore = useScenicStore()
 const loading = ref(false)
 const loadFailed = ref(false)
 const spots = ref<ScenicSpot[]>([])
 const failedImages = ref(new Set<number>())
 const initialInterest = authStore.user?.interest?.split(/[,，、]/)[0]?.trim() || ''
-const filters = reactive({ keyword: '', tag: initialInterest, scenic_area: '', spot_type: undefined as SpotType | undefined })
+const filters = reactive({ keyword: '', tag: initialInterest, scenic_area: scenicStore.selectedName, spot_type: undefined as SpotType | undefined })
 const activeFilters = computed(() => [filters.keyword, filters.tag, filters.scenic_area, filters.spot_type].filter(Boolean).length)
 
 function typeLabel(type: SpotType) {
@@ -36,7 +38,7 @@ async function loadSpots() {
 function resetFilters() {
   filters.keyword = ''
   filters.tag = ''
-  filters.scenic_area = ''
+  filters.scenic_area = scenicStore.selectedName
   filters.spot_type = undefined
   loadSpots()
 }
