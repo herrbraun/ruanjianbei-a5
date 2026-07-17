@@ -1437,6 +1437,34 @@
   grid-template-rows: auto minmax(430px, 1fr) auto;
 }
 
+.guide-conversation-card.has-route-context {
+  grid-template-rows: auto auto minmax(430px, 1fr) auto;
+}
+
+.guide-route-progress {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 13px 22px;
+  padding: 16px clamp(18px, 4vw, 28px) 13px;
+  border-top: 1px solid #d8e5e0;
+  border-bottom: 1px solid #c7dcd5;
+  background:
+    linear-gradient(100deg, rgba(224, 242, 236, .96), rgba(249, 246, 232, .92)),
+    var(--guide-paper);
+}
+
+.guide-route-progress-main { display: grid; gap: 3px; min-width: 0; }
+.guide-route-progress-main > span { color: #167a6e; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.guide-route-progress-main > strong { overflow: hidden; color: var(--guide-ink); font-family: "Noto Serif SC", "Songti SC", STSong, serif; font-size: 18px; text-overflow: ellipsis; white-space: nowrap; }
+.guide-route-progress-main > p { overflow: hidden; margin: 0; color: #60766e; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.guide-route-actions { display: flex; align-items: center; gap: 7px; }
+.guide-route-dots { display: flex; grid-column: 1 / -1; gap: 6px; }
+.guide-route-dots i { width: 18px; height: 3px; border-radius: 3px; background: #c8d8d2; transition: background .25s, transform .25s; }
+.guide-route-dots i.passed { background: #7fb4a9; }
+.guide-route-dots i.active { background: #087f73; transform: scaleY(1.7); }
+
 .guide-conversation-heading {
   padding: 20px clamp(18px, 4vw, 28px);
 }
@@ -1614,6 +1642,12 @@
     width: 100%;
     justify-content: space-between;
   }
+
+  .guide-route-progress { grid-template-columns: 1fr; padding: 14px 16px 12px; }
+  .guide-route-progress-main > strong { font-size: 17px; }
+  .guide-route-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .guide-route-actions .el-button { width: 100%; margin-left: 0; }
+  .guide-route-dots { grid-column: 1; overflow: hidden; }
 
   .guide-message-stream {
     max-height: none;

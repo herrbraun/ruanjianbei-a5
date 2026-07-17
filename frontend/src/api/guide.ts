@@ -5,9 +5,30 @@ export interface GuideSession {
   id: number
   scenic_area_id: number
   initial_rag_profile_id: number | null
+  route_plan_id: number | null
+  current_spot_id: number | null
   title: string | null
   created_at: string
   updated_at: string
+}
+
+export interface GuideRouteSpot {
+  spot_id: number
+  sequence: number
+  name: string
+  summary: string
+  stay_minutes: number
+  reason: string
+  tags: string[]
+}
+
+export interface GuideRouteContext {
+  route_plan_id: number
+  interest: string
+  current_spot_id: number
+  current_sequence: number
+  total_spots: number
+  spots: GuideRouteSpot[]
 }
 
 export interface GuideSource {
@@ -55,8 +76,18 @@ export type GuideFeedbackTag = 'answer_accurate' | 'voice_natural' | 'avatar_pre
 export interface GuideFeedback { id: number; guide_session_id: number; rating: number; tags: GuideFeedbackTag[]; comment: string | null; created_at: string; updated_at: string }
 
 export const guideApi = {
-  createSession: (scenicAreaCode: string) => http.post<GuideSession>('/guide/sessions', { scenic_area_code: scenicAreaCode }),
+  createSession: (scenicAreaCode: string, routePlanId?: number, currentSpotId?: number) => http.post<GuideSession>('/guide/sessions', {
+    scenic_area_code: scenicAreaCode,
+    route_plan_id: routePlanId,
+    current_spot_id: currentSpotId,
+  }),
   listSessions: () => http.get<GuideSession[]>('/guide/sessions'),
+  getSession: (sessionId: number) => http.get<GuideSession>(`/guide/sessions/${sessionId}`),
+  getRouteContext: (sessionId: number) => http.get<GuideRouteContext>(`/guide/sessions/${sessionId}/context`),
+  updateRouteContext: (sessionId: number, routePlanId: number, currentSpotId: number) => http.patch<GuideRouteContext>(`/guide/sessions/${sessionId}/context`, {
+    route_plan_id: routePlanId,
+    current_spot_id: currentSpotId,
+  }),
   listMessages: (sessionId: number) => http.get<GuideMessage[]>(`/guide/sessions/${sessionId}/messages`),
   getFeedback: (sessionId: number) => http.get<GuideFeedback | null>(`/guide/sessions/${sessionId}/feedback`),
   saveFeedback: (sessionId: number, data: { rating: number; tags: GuideFeedbackTag[]; comment?: string }) => http.post<GuideFeedback>(`/guide/sessions/${sessionId}/feedback`, data),

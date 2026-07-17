@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, Location, MapLocation, Timer } from '@element-plus/icons-vue'
+import { ChatDotRound, Check, Location, MapLocation, Timer } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 
@@ -87,8 +87,14 @@ onMounted(() => { loadSpots(); loadInterests() })
 
       <section v-if="routePlan" class="route-plan-panel" aria-live="polite">
         <header class="route-plan-header"><div><span>推荐路线 #{{ routePlan.id }}</span><h2>{{ preferenceLabels[routePlan.preference] }}</h2><p>{{ routePlan.reason }}</p></div><div class="route-duration"><el-icon><Timer /></el-icon><strong>{{ routePlan.total_duration_minutes }}</strong><span>/ {{ routePlan.duration_minutes }} 分钟</span></div></header>
+        <div v-if="routePlan.spots[0]?.spot_id" class="route-guide-callout">
+          <div><span>数字人随行讲解</span><strong>让讲解员按这条路线陪你游览</strong><p>讲解会记住你的兴趣和当前站点，途中可以随时切换上一站或继续下一站。</p></div>
+          <RouterLink :to="{ path: '/visitor/guide', query: { route_id: routePlan.id, spot_id: routePlan.spots[0].spot_id, start: '1' } }">
+            <el-button type="primary" :icon="ChatDotRound">开始数字人导览</el-button>
+          </RouterLink>
+        </div>
         <ol class="route-timeline">
-          <li v-for="spot in routePlan.spots" :key="spot.id"><div class="timeline-marker">{{ spot.sequence }}</div><article><div class="timeline-heading"><div><span v-if="spot.spot_id === routePlan.start_spot_id" class="start-label">起点</span><h3>{{ spot.name }}</h3></div><strong>{{ spot.stay_minutes }} 分钟</strong></div><p>{{ spot.summary }}</p><div class="route-location"><el-icon><Location /></el-icon><span>{{ spot.location || '位置待补充' }}</span></div><p class="route-basis">{{ spot.reason }}</p><RouterLink v-if="spot.spot_id" class="text-link" :to="`/visitor/spots/${spot.spot_id}`">查看景点详情</RouterLink></article></li>
+          <li v-for="spot in routePlan.spots" :key="spot.id"><div class="timeline-marker">{{ spot.sequence }}</div><article><div class="timeline-heading"><div><span v-if="spot.spot_id === routePlan.start_spot_id" class="start-label">起点</span><h3>{{ spot.name }}</h3></div><strong>{{ spot.stay_minutes }} 分钟</strong></div><p>{{ spot.summary }}</p><div class="route-location"><el-icon><Location /></el-icon><span>{{ spot.location || '位置待补充' }}</span></div><p class="route-basis">{{ spot.reason }}</p><div class="route-spot-actions"><RouterLink v-if="spot.spot_id" class="text-link" :to="`/visitor/spots/${spot.spot_id}`">查看景点详情</RouterLink><RouterLink v-if="spot.spot_id" :to="{ path: '/visitor/guide', query: { route_id: routePlan.id, spot_id: spot.spot_id, start: '1' } }"><el-button size="small" plain :icon="ChatDotRound">从这一站开始讲解</el-button></RouterLink></div></article></li>
         </ol>
         <section class="feedback-panel"><div><span>路线反馈</span><h3>{{ feedbackSubmitted ? '反馈已提交' : '这条路线适合你吗？' }}</h3></div><div v-if="feedbackSubmitted" class="feedback-success"><el-icon><Check /></el-icon><span>感谢你的评价，可再次提交以更新反馈。</span></div><el-rate v-model="feedback.rating" aria-label="路线评分" /><el-input v-model="feedback.comment" type="textarea" :rows="3" placeholder="补充你的游览感受（可选）" /><el-button type="primary" plain :loading="feedbackLoading" @click="submitFeedback">{{ feedbackSubmitted ? '更新反馈' : '提交反馈' }}</el-button></section>
       </section>

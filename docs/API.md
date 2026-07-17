@@ -161,10 +161,12 @@ Authorization: Bearer <jwt-token>
 - `POST /rag/search`：只接收景区编码、问题和可选 `top_k`，后端自动使用该景区当前正式 Profile。
 # 游客导览会话
 
-- `POST /api/guide/sessions`：游客为一个景区创建导览会话，提交 `{ "scenic_area_code": "lingshan" }`。
+- `POST /api/guide/sessions`：游客为一个景区创建导览会话，提交 `{ "scenic_area_code": "lingshan" }`；也可同时传入 `route_plan_id` 与 `current_spot_id`，从个性化路线的指定站点开始。
 - `GET /api/guide/sessions`：获取当前游客的会话。
+- `GET /api/guide/sessions/{session_id}`：读取当前游客自己的完整会话及已绑定路线、当前景点。
+- `GET|PATCH /api/guide/sessions/{session_id}/context`：读取或更新路线导览进度；后端校验路线归属、景区匹配及景点确实属于路线。
 - `GET /api/guide/sessions/{session_id}/messages`：获取当前游客自己的会话消息。
-- `POST /api/guide/sessions/{session_id}/messages`：提交 `{ "content": "灵山大佛有什么文化意义？", "input_mode": "text" }`，返回游客问题、带资料引用的 AI 回答和实际 RAG Profile。
+- `POST /api/guide/sessions/{session_id}/messages`：提交 `{ "content": "灵山大佛有什么文化意义？", "input_mode": "text" }`，返回游客问题、带资料引用的 AI 回答和实际 RAG Profile；已绑定路线时，检索与回答自动携带当前景点、完整行程及游客兴趣。
 - `POST /api/guide/asr`：以 `multipart/form-data` 上传短录音字段 `file`，返回识别后的文本；录音会临时转为 16 kHz WAV 并在请求结束后删除。
 - `POST /api/guide/messages/{message_id}/speech`：为当前游客自己的 AI 回答生成并返回音频流。
 

@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.guide import GuideFeedback, GuideMessage, GuideSession
 from app.models.knowledge import ScenicArea
+from app.models.spot import RoutePlan, RouteSpot
 
 
 def create_guide_session(
@@ -15,17 +16,52 @@ def create_guide_session(
     user_id: int,
     scenic_area: ScenicArea,
     initial_rag_profile_id: int | None,
+    route_plan_id: int | None = None,
+    current_spot_id: int | None = None,
 ) -> GuideSession:
     session = GuideSession(
         user_id=user_id,
         scenic_area_id=scenic_area.id,
         initial_rag_profile_id=initial_rag_profile_id,
+        route_plan_id=route_plan_id,
+        current_spot_id=current_spot_id,
         title=scenic_area.name,
     )
     db.add(session)
     db.commit()
     db.refresh(session)
     return session
+
+
+def set_guide_route_context(
+    db: Session,
+    session: GuideSession,
+    *,
+    route_plan_id: int,
+    current_spot_id: int,
+) -> None:
+    session.route_plan_id = route_plan_id
+    session.current_spot_id = current_spot_id
+    session.updated_at = datetime.now(timezone.utc)
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+
+
+def get_session_route_plan(db: Session, session: GuideSession) -> RoutePlan | None:
+    if session.route_plan_id is None:
+        return None
+    return db.get(RoutePlan, session.route_plan_id)
+
+
+def get_route_spots(db: Session, route_plan_id: int) -> list[RouteSpot]:
+    statement = (
+        select(RouteSpot)
+        .options(selectinload(RouteSpot.spot))
+        .where(RouteSpot.route_plan_id == route_plan_id)
+        .order_by(RouteSpot.sequence)
+    )
+    return list(db.scalars(statement))
 
 
 def list_user_guide_sessions(db: Session, user_id: int) -> list[GuideSession]:

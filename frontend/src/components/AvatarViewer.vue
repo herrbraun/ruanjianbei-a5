@@ -382,9 +382,8 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
-.avatar-viewer :slotted(*) {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
+.avatar-viewer :slotted(.guide-avatar-fallback) {
+  width: 100%;
+  height: 100%;
 }
 </style>

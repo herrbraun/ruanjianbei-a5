@@ -1,16 +1,20 @@
 <script setup lang="ts">
-import { Compass, Document, Loading, Microphone, Position, VideoPlay } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Compass, Document, Loading, Microphone, Position, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import AvatarViewer from '@/components/AvatarViewer.vue'
 import { avatarApi, avatarAssetUrl, type ScenicAvatar } from '@/api/avatar'
 import { guideApi, type GuideFeedbackTag, type GuideMessage, type GuideSource } from '@/api/guide'
 import { knowledgeApi, type ScenicArea } from '@/api/knowledge'
+import { getRoute } from '@/api/routes'
 import AppLayout from '@/layouts/AppLayout.vue'
 import { useGuideStore } from '@/stores/guide'
 
 const guideStore = useGuideStore()
+const route = useRoute()
+const router = useRouter()
 const scenicAreas = ref<ScenicArea[]>([])
 const selectedScenicCode = ref('')
 const guideStarted = ref(false)
@@ -31,6 +35,7 @@ const avatarRenderError = ref('')
 const audioLevel = ref(0)
 const avatarGesture = ref<'welcome' | 'guiding'>()
 const avatarWelcomeRequest = ref(0)
+const routeActionLoading = ref(false)
 const feedbackLoading = ref(false)
 const feedbackSaving = ref(false)
 const feedbackSubmitted = ref(false)
@@ -63,6 +68,12 @@ const messages = computed(() => guideStore.messages)
 const hasAssistantAnswer = computed(() => messages.value.some((message) => message.role === 'assistant' && message.status === 'success'))
 const sessionReady = computed(() => guideStarted.value && Boolean(guideStore.activeSession && !guideStore.loadingMessages))
 const activeAvatar = computed(() => scenicAvatars.value.find((avatar) => avatar.id === selectedAvatarId.value))
+const activeRouteContext = computed(() => guideStore.activeRouteContext)
+const currentRouteSpot = computed(() => activeRouteContext.value?.spots.find((spot) => spot.spot_id === activeRouteContext.value?.current_spot_id))
+const currentRouteIndex = computed(() => activeRouteContext.value?.spots.findIndex((spot) => spot.spot_id === activeRouteContext.value?.current_spot_id) ?? -1)
+const hasPreviousRouteSpot = computed(() => currentRouteIndex.value > 0)
+const hasNextRouteSpot = computed(() => Boolean(activeRouteContext.value && currentRouteIndex.value >= 0 && currentRouteIndex.value < activeRouteContext.value.spots.length - 1))
+const routeControlsBusy = computed(() => routeActionLoading.value || guideStore.sending || guideStore.updatingRouteContext)
 const avatarAsset = computed(() => (
   selectedScenicCode.value && activeAvatar.value
     ? avatarAssetUrl(selectedScenicCode.value, activeAvatar.value.id)
@@ -166,38 +177,103 @@ function onAvatarSelectionChange(avatarId: number | string) {
   requestAvatarWelcome()
 }
 
-async function openGuideSession() {
+async function openGuideSession(routePlanId?: number, currentSpotId?: number) {
   if (!selectedScenicCode.value) return
   try {
     stopAudio()
-    await guideStore.openScenicArea(selectedScenicCode.value)
+    await guideStore.openScenicArea(selectedScenicCode.value, routePlanId, currentSpotId)
     await scrollToLatest()
   } catch (error) {
     ElMessage.error(errorText(error, '无法打开该景区的导览会话'))
   }
 }
 
-async function startGuide() {
+async function startGuide(routePlanId?: number, currentSpotId?: number) {
   if (!selectedScenicCode.value) {
     ElMessage.warning('请先选择景区')
     return
   }
   requestAvatarWelcome()
   guideStarted.value = true
-  await Promise.all([openGuideSession(), loadScenicAvatars()])
+  await Promise.all([openGuideSession(routePlanId, currentSpotId), loadScenicAvatars()])
   if (!guideStore.activeSession) {
     guideStarted.value = false
     return
   }
 }
 
-function returnToScenicSelection() {
+async function sendRouteIntroduction(spotId?: number) {
+  const context = activeRouteContext.value
+  if (!context || routeControlsBusy.value) return
+  const target = context.spots.find((spot) => spot.spot_id === (spotId || context.current_spot_id))
+  if (!target) return
+  routeActionLoading.value = true
+  try {
+    if (target.spot_id !== context.current_spot_id) await guideStore.setRouteStop(context.route_plan_id, target.spot_id)
+    await router.replace({ path: route.path, query: { route_id: String(context.route_plan_id), spot_id: String(target.spot_id) } })
+    triggerAvatarGesture('guiding', 2200)
+    draft.value = `我们现在到达路线第 ${target.sequence} 站“${target.name}”。请结合我的兴趣“${context.interest}”主动讲解这一站，并简要告诉我它与后续行程的联系。`
+    await sendQuestion()
+  } catch (error) {
+    ElMessage.error(errorText(error, '当前站讲解启动失败，请重试'))
+  } finally {
+    routeActionLoading.value = false
+  }
+}
+
+async function moveRoute(step: number, introduce: boolean) {
+  const context = activeRouteContext.value
+  const nextIndex = currentRouteIndex.value + step
+  const target = context?.spots[nextIndex]
+  if (!context || !target || routeControlsBusy.value) return
+  routeActionLoading.value = true
+  try {
+    await guideStore.setRouteStop(context.route_plan_id, target.spot_id)
+    await router.replace({ path: route.path, query: { route_id: String(context.route_plan_id), spot_id: String(target.spot_id) } })
+    triggerAvatarGesture('guiding', 1800)
+    if (introduce) {
+      draft.value = `我们现在到达路线第 ${target.sequence} 站“${target.name}”。请结合我的兴趣“${context.interest}”主动讲解这一站，并简要告诉我它与后续行程的联系。`
+      await sendQuestion()
+    } else ElMessage.success(`已切换到第 ${target.sequence} 站：${target.name}`)
+  } catch (error) {
+    ElMessage.error(errorText(error, '行程进度更新失败'))
+  } finally {
+    routeActionLoading.value = false
+  }
+}
+
+async function initializeGuidePage() {
+  await loadScenicAreas()
+  const routePlanId = Number(route.query.route_id)
+  const currentSpotId = Number(route.query.spot_id)
+  if (!Number.isInteger(routePlanId) || !Number.isInteger(currentSpotId) || routePlanId <= 0 || currentSpotId <= 0) return
+  try {
+    const routePlan = (await getRoute(routePlanId)).data
+    const scenicArea = scenicAreas.value.find((area) => area.name === routePlan.scenic_area)
+    if (!scenicArea) throw new Error('Route scenic area is unavailable')
+    selectedScenicCode.value = scenicArea.code
+    await startGuide(routePlanId, currentSpotId)
+    if (guideStore.activeSession && route.query.start === '1') {
+      await router.replace({ path: route.path, query: { route_id: String(routePlanId), spot_id: String(currentSpotId) } })
+      await sendRouteIntroduction(currentSpotId)
+    }
+  } catch (error) {
+    ElMessage.error(errorText(error, '无法从这条路线开始数字人导览'))
+  }
+}
+
+async function returnToScenicSelection() {
+  if (routeControlsBusy.value || guideStore.loadingMessages) return
   stopAudio()
   clearAvatarGesture()
+  routeActionLoading.value = false
+  guideStore.closeActiveGuide()
   guideStarted.value = false
+  await router.replace({ path: route.path })
 }
 
 async function sendQuestion() {
+  if (guideStore.sending) return
   const content = draft.value.trim()
   if (!content) {
     ElMessage.warning('请输入问题，或点击麦克风录音')
@@ -475,7 +551,7 @@ async function saveFeedback() {
 watch(messages, () => void scrollToLatest(), { deep: true })
 watch(() => guideStore.activeSession?.id, () => void loadFeedback())
 
-onMounted(() => void loadScenicAreas())
+onMounted(() => void initializeGuidePage())
 onBeforeUnmount(() => {
   stopRecordClock()
   if (mediaRecorder?.state === 'recording') mediaRecorder.stop()
@@ -507,17 +583,32 @@ onBeforeUnmount(() => {
         </el-button>
       </article>
 
-      <article v-else class="guide-conversation-card">
+      <article v-else class="guide-conversation-card" :class="{ 'has-route-context': activeRouteContext }">
         <header class="guide-conversation-heading">
           <div>
             <p class="eyebrow">ASK · LISTEN · EXPLORE</p>
             <h2>{{ selectedScenicArea?.name || '景区导览' }}</h2>
           </div>
           <div class="guide-conversation-tools">
-            <el-button text @click="returnToScenicSelection">切换景区</el-button>
+            <el-button text :disabled="routeControlsBusy || guideStore.loadingMessages" @click="returnToScenicSelection">切换景区</el-button>
             <span class="guide-session-status" :class="{ ready: sessionReady }"><i />{{ sessionReady ? '导览已就绪' : '正在连接' }}</span>
           </div>
         </header>
+
+        <section v-if="activeRouteContext && currentRouteSpot" class="guide-route-progress" aria-label="当前个性化行程">
+          <div class="guide-route-progress-main">
+            <span>个性化行程 · {{ activeRouteContext.interest }}</span>
+            <strong>第 {{ currentRouteSpot.sequence }} / {{ activeRouteContext.total_spots }} 站 · {{ currentRouteSpot.name }}</strong>
+            <p>{{ currentRouteSpot.reason }}</p>
+          </div>
+          <div class="guide-route-actions">
+            <el-button size="small" :icon="ArrowLeft" :disabled="!hasPreviousRouteSpot || routeControlsBusy" @click="moveRoute(-1, false)">上一站</el-button>
+            <el-button size="small" plain :disabled="routeControlsBusy" @click="sendRouteIntroduction()">讲解当前站</el-button>
+            <el-button size="small" :icon="ArrowRight" :disabled="!hasNextRouteSpot || routeControlsBusy" @click="moveRoute(1, false)">下一站</el-button>
+            <el-button size="small" type="primary" :disabled="!hasNextRouteSpot || routeControlsBusy" @click="moveRoute(1, true)">继续导览</el-button>
+          </div>
+          <div class="guide-route-dots" aria-hidden="true"><i v-for="spot in activeRouteContext.spots" :key="spot.spot_id" :class="{ active: spot.spot_id === activeRouteContext.current_spot_id, passed: spot.sequence < currentRouteSpot.sequence }" /></div>
+        </section>
 
         <div ref="conversationElement" class="guide-message-stream">
           <section class="guide-assistant-intro" :aria-busy="avatarListLoading">
@@ -543,8 +634,8 @@ onBeforeUnmount(() => {
               </div>
               <div class="guide-welcome-bubble">
                 <span>{{ activeAvatar?.name || '景区讲解员' }}</span>
-                <strong>欢迎来到{{ selectedScenicArea?.name || '景区' }}！</strong>
-                <p>我是你的数字讲解员。想了解景点故事、游览路线，还是今天的演出安排？</p>
+                <strong>{{ currentRouteSpot ? `路线第 ${currentRouteSpot.sequence} 站：${currentRouteSpot.name}` : `欢迎来到${selectedScenicArea?.name || '景区'}！` }}</strong>
+                <p>{{ currentRouteSpot ? `我会按“${activeRouteContext?.interest}”偏好调整讲解重点，并陪你走完这条路线。` : '我是你的数字讲解员。想了解景点故事、游览路线，还是今天的演出安排？' }}</p>
               </div>
             </div>
             <p v-if="avatarRenderError" class="guide-avatar-error">{{ avatarRenderError }}</p>

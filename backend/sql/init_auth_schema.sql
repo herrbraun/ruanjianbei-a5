@@ -227,13 +227,19 @@ CREATE TABLE IF NOT EXISTS guide_sessions (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     scenic_area_id INTEGER NOT NULL REFERENCES scenic_areas(id) ON DELETE CASCADE,
     initial_rag_profile_id INTEGER REFERENCES rag_profiles(id) ON DELETE SET NULL,
+    route_plan_id INTEGER,
+    current_spot_id INTEGER,
     title VARCHAR(120),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE guide_sessions ADD COLUMN IF NOT EXISTS route_plan_id INTEGER;
+ALTER TABLE guide_sessions ADD COLUMN IF NOT EXISTS current_spot_id INTEGER;
 CREATE INDEX IF NOT EXISTS ix_guide_sessions_user_id ON guide_sessions (user_id);
 CREATE INDEX IF NOT EXISTS ix_guide_sessions_scenic_area_id ON guide_sessions (scenic_area_id);
 CREATE INDEX IF NOT EXISTS ix_guide_sessions_initial_rag_profile_id ON guide_sessions (initial_rag_profile_id);
+CREATE INDEX IF NOT EXISTS ix_guide_sessions_route_plan_id ON guide_sessions (route_plan_id);
+CREATE INDEX IF NOT EXISTS ix_guide_sessions_current_spot_id ON guide_sessions (current_spot_id);
 CREATE INDEX IF NOT EXISTS ix_guide_sessions_user_updated ON guide_sessions (user_id, updated_at);
 
 CREATE TABLE IF NOT EXISTS guide_messages (
@@ -403,6 +409,18 @@ CREATE INDEX IF NOT EXISTS ix_route_plans_id ON route_plans (id);
 CREATE INDEX IF NOT EXISTS ix_route_plans_user_id ON route_plans (user_id);
 CREATE INDEX IF NOT EXISTS ix_route_plans_start_spot_id ON route_plans (start_spot_id);
 CREATE INDEX IF NOT EXISTS ix_route_plans_scenic_area ON route_plans (scenic_area);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_guide_sessions_route_plan_id') THEN
+        ALTER TABLE guide_sessions ADD CONSTRAINT fk_guide_sessions_route_plan_id
+            FOREIGN KEY (route_plan_id) REFERENCES route_plans(id) ON DELETE SET NULL;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_guide_sessions_current_spot_id') THEN
+        ALTER TABLE guide_sessions ADD CONSTRAINT fk_guide_sessions_current_spot_id
+            FOREIGN KEY (current_spot_id) REFERENCES scenic_spots(id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS route_spots (
     id SERIAL PRIMARY KEY,

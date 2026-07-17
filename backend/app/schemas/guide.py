@@ -8,6 +8,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class GuideSessionCreate(BaseModel):
     scenic_area_code: str = Field(min_length=2, max_length=64)
+    route_plan_id: int | None = Field(default=None, gt=0)
+    current_spot_id: int | None = Field(default=None, gt=0)
+
+
+class GuideSessionContextUpdate(BaseModel):
+    route_plan_id: int = Field(gt=0)
+    current_spot_id: int = Field(gt=0)
 
 
 class GuideSessionOut(BaseModel):
@@ -16,9 +23,30 @@ class GuideSessionOut(BaseModel):
     id: int
     scenic_area_id: int
     initial_rag_profile_id: int | None
+    route_plan_id: int | None
+    current_spot_id: int | None
     title: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class GuideRouteSpotOut(BaseModel):
+    spot_id: int
+    sequence: int
+    name: str
+    summary: str
+    stay_minutes: int
+    reason: str
+    tags: list[str]
+
+
+class GuideRouteContextOut(BaseModel):
+    route_plan_id: int
+    interest: str
+    current_spot_id: int
+    current_sequence: int
+    total_spots: int
+    spots: list[GuideRouteSpotOut]
 
 
 class GuideMessageCreate(BaseModel):

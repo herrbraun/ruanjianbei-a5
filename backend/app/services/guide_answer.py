@@ -66,6 +66,8 @@ def generate_guide_answer(
     scenic_area_name: str,
     profile_name: str,
     history: list[tuple[str, str]],
+    visitor_interests: str | None = None,
+    route_context: str | None = None,
     client: httpx.Client | None = None,
 ) -> GuideGeneratedAnswer:
     if not settings.dashscope_api_key or settings.dashscope_api_key == "your_dashscope_api_key":
@@ -87,6 +89,7 @@ def generate_guide_answer(
                             "你是亲切、准确的中文景区数字导览员。只能依据提供的检索资料作答，不得编造。"
                             "若资料不足，请直接说明暂未在景区资料中找到答案。回答适合语音播报，控制在 450 个汉字以内；"
                             "不要在回答中出现资料编号、方括号引用、文件名、表号或任何来源标记；相关资料由产品界面单独展示。"
+                            "若提供了游客兴趣和行程上下文，应优先围绕游客兴趣选择讲解重点，并自然衔接当前站与后续行程。"
                         ),
                     },
                     {
@@ -94,6 +97,8 @@ def generate_guide_answer(
                         "content": (
                             f"景区：{scenic_area_name}\n"
                             f"当前知识版本：{profile_name}\n"
+                            f"游客兴趣：{visitor_interests or '未指定'}\n"
+                            f"当前行程：{route_context or '未绑定个性化路线'}\n"
                             f"最近会话：\n{_history_context(history)}\n\n"
                             f"本次问题：{query}\n\n"
                             f"检索资料：\n{_source_context(hits)}"
