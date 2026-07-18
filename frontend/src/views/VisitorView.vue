@@ -97,8 +97,15 @@ const avatarMotion = computed<'idle' | 'listening' | 'thinking' | 'speaking' | '
 })
 
 function errorText(error: unknown, fallback: string) {
-  const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-  return detail || (error instanceof Error ? error.message : fallback)
+  const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => (typeof item === 'object' && item && 'msg' in item ? String(item.msg) : ''))
+      .filter(Boolean)
+    if (messages.length) return messages.join('；')
+  }
+  return error instanceof Error ? error.message : fallback
 }
 
 function formatTime(value: string) {
@@ -534,7 +541,7 @@ onBeforeUnmount(() => {
             <span>{{ selectedScenicArea.description || '景点讲解和游览问答已准备好' }}</span>
           </div>
         </div>
-        <el-button class="guide-start-button" type="primary" size="large" :disabled="!selectedScenicCode || loadingAreas" @click="startGuide">
+        <el-button class="guide-start-button" type="primary" size="large" :disabled="!selectedScenicCode || loadingAreas" @click="startGuide()">
           开始导览 <Compass />
         </el-button>
       </article>

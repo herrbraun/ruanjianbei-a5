@@ -78,3 +78,31 @@ def test_route_rejects_start_spot_from_another_scenic_area(client: TestClient) -
     )
 
     assert response.status_code == 400
+
+
+def test_admin_route_endpoints_are_registered(client: TestClient) -> None:
+    admin_headers = auth_headers(client, "/api/auth/admin-login", "admin", "123456")
+    create_spot(client, admin_headers, scenic_area="灵山胜境", name="管理端路线测试景点")
+    register = client.post(
+        "/api/auth/visitor-register",
+        json={"username": "adminroutevisitor", "password": "password123"},
+    )
+    visitor_headers = {"Authorization": f"Bearer {register.json()['access_token']}"}
+    recommendation = client.post(
+        "/api/routes/recommend",
+        headers=visitor_headers,
+        json={
+            "scenic_area": "灵山胜境",
+            "interest": "文化",
+            "duration_minutes": 60,
+            "preference": "balanced",
+        },
+    )
+    assert recommendation.status_code == 201
+
+    routes_response = client.get("/api/admin/routes", headers=admin_headers)
+    settings_response = client.get("/api/admin/routes/settings", headers=admin_headers)
+
+    assert routes_response.status_code == 200
+    assert len(routes_response.json()) == 1
+    assert settings_response.status_code == 200

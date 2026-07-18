@@ -378,7 +378,9 @@ CREATE TABLE IF NOT EXISTS insight_report_schedules (
 );
 
 INSERT INTO scenic_areas (code, name, description)
-VALUES ('lingshan', '灵山胜境', '灵山胜境示范景区')
+VALUES
+    ('lingshan', '灵山胜境', '灵山胜境示范景区'),
+    ('nianhuawan', '拈花湾禅意小镇', '拈花湾禅意小镇景区')
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO insight_report_schedules (scenic_area_id)
@@ -388,11 +390,17 @@ ON CONFLICT (scenic_area_id) DO NOTHING;
 INSERT INTO knowledge_bases (code, name, description)
 VALUES
     ('lingshan-structured', '灵山结构化景点资料库', '景点基础信息、开放时间与演艺安排'),
-    ('lingshan-culture', '灵山历史文化资料库', '历史、文化和导览叙述资料')
+    ('lingshan-culture', '灵山历史文化资料库', '历史、文化和导览叙述资料'),
+    ('nianhuawan-structured', '拈花湾结构化景点资料库', '景点基础信息、开放时间与演艺安排'),
+    ('nianhuawan-culture', '拈花湾历史文化资料库', '历史、文化和导览叙述资料')
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO rag_profiles (scenic_area_id, name, status)
 SELECT id, '灵山正式版 RAG', 'active' FROM scenic_areas WHERE code = 'lingshan'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO rag_profiles (scenic_area_id, name, status)
+SELECT id, '拈花湾正式版 RAG', 'active' FROM scenic_areas WHERE code = 'nianhuawan'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO rag_profile_knowledge_bases (rag_profile_id, knowledge_base_id, retrieval_priority)
@@ -401,6 +409,14 @@ FROM rag_profiles profile
 JOIN scenic_areas scenic ON scenic.id = profile.scenic_area_id
 JOIN knowledge_bases base ON base.code IN ('lingshan-structured', 'lingshan-culture')
 WHERE scenic.code = 'lingshan' AND profile.name = '灵山正式版 RAG'
+ON CONFLICT (rag_profile_id, knowledge_base_id) DO NOTHING;
+
+INSERT INTO rag_profile_knowledge_bases (rag_profile_id, knowledge_base_id, retrieval_priority)
+SELECT profile.id, base.id, CASE WHEN base.code = 'nianhuawan-structured' THEN 100 ELSE 10 END
+FROM rag_profiles profile
+JOIN scenic_areas scenic ON scenic.id = profile.scenic_area_id
+JOIN knowledge_bases base ON base.code IN ('nianhuawan-structured', 'nianhuawan-culture')
+WHERE scenic.code = 'nianhuawan' AND profile.name = '拈花湾正式版 RAG'
 ON CONFLICT (rag_profile_id, knowledge_base_id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS scenic_spots (

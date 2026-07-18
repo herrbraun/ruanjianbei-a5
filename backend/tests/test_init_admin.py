@@ -9,6 +9,7 @@ def test_initial_admin_credentials_require_a_strong_environment_password(monkeyp
     read_credentials = getattr(init_admin, "read_initial_admin_credentials", None)
     assert read_credentials is not None
 
+    monkeypatch.setattr(init_admin.settings, "initial_admin_password", "")
     monkeypatch.delenv("INITIAL_ADMIN_PASSWORD", raising=False)
     with pytest.raises(RuntimeError, match="INITIAL_ADMIN_PASSWORD"):
         read_credentials()
