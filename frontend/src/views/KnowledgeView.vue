@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Delete, MagicStick, Plus, RefreshRight, Search, UploadFilled } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import { knowledgeApi, type KnowledgeBase, type KnowledgeDocument, type RagProfile, type RagSearchPreviewResult, type ScenicArea } from '@/api/knowledge'

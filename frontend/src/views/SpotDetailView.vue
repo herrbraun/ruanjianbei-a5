@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ArrowLeft, Headset, VideoPlay } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 

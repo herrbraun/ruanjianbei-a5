@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ArrowRight, Lock, Location, RefreshRight } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 

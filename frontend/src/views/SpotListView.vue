@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Refresh, Search } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
 import { computed, onMounted, reactive, ref } from 'vue'
 
 import { getSpots, type ScenicSpot, type SpotType } from '@/api/spots'

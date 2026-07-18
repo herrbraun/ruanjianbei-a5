@@ -24,7 +24,7 @@ TTS_FIRST_CHUNK_TIMEOUT_MS=4500
 AVATAR_MAX_UPLOAD_BYTES=83886080
 ```
 
-游客端用 Three.js 与 `@pixiv/three-vrm` 渲染 VRM，并用 TTS 音频的 `AnalyserNode` 音量驱动 `aa` 嘴型；火山实时 TTS 以 24kHz 单声道 PCM 分片返回，Web Audio 收到首片后立即排队播放。后台可配置火山/千问的默认、备用、模型、音色和首包阈值；只有在首个音频分片之前失败才切换备用服务。模型或 WebGL 不可用时会保留文字与语音讲解并显示静态卡片。
+游客端用 Three.js 与 `@pixiv/three-vrm` 渲染 VRM，并用 TTS 音频的 `AnalyserNode` 音量驱动 `aa` 嘴型；Three/VRM 通过异步组件延迟到数字人舞台挂载后加载，景区人物列表只包含元数据，浏览器只请求当前选中外观的 VRM。模型响应带私有长期缓存、ETag、`Accept-Ranges`，支持条件请求和断点传输。火山实时 TTS 以 24kHz 单声道 PCM 分片返回，Web Audio 收到首片后立即排队播放。后台可配置火山/千问的默认、备用、模型、音色和首包阈值；只有在首个音频分片之前失败才切换备用服务。动作切换采用交叉淡化，欢迎和路线方向类回答会触发对应动作，长播报会加入周期性轻微重心变化。模型或 WebGL 不可用时会保留文字与语音讲解并显示静态卡片。
 
 仓库内的 `backend/uploads/avatars/manifest.json` 是 10 个比赛数字人的可复现清单，直接关联已提交的哈希命名 VRM。全新数据库迁移完成后执行：
 

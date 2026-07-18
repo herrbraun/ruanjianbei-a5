@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ChatDotRound, Check, Location, MapLocation, Timer } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 
 import { getInterestOptions, updateProfile } from '@/api/auth'

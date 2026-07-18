@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Delete, EditPen, Microphone, StarFilled, UploadFilled, User } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import {

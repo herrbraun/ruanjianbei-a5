@@ -11,6 +11,7 @@ import {
 
 type AvatarState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'welcome' | 'guiding'
 type AnimatedState = Exclude<AvatarState, 'listening'>
+const ANIMATION_FADE_SECONDS = 0.45
 
 const ANIMATION_ASSETS: Record<AnimatedState, { url: string; loop: boolean }> = {
   idle: { url: '/animations/chatvrm-idle-loop.vrma', loop: true },
@@ -160,10 +161,11 @@ function applyAnimationState(state: AvatarState) {
     next.paused = false
     next.enabled = true
     next.setEffectiveWeight(1)
-    if (previous && previous !== next) next.crossFadeFrom(previous, 0.2, false)
+    if (previous && previous !== next) next.crossFadeFrom(previous, ANIMATION_FADE_SECONDS, false)
+    else next.fadeIn(ANIMATION_FADE_SECONDS)
     next.play()
   } else if (previous) {
-    previous.fadeOut(0.16)
+    previous.fadeOut(ANIMATION_FADE_SECONDS)
   }
   activeAnimatedState = next ? nextState : undefined
 }
@@ -298,7 +300,7 @@ function updateAvatar(time: number) {
   previousTime = time
   if (currentVrm) {
     const manager = currentVrm.expressionManager
-    const isSpeaking = props.state === 'speaking'
+    const isSpeaking = props.state === 'speaking' || props.audioLevel > 0.015
     const mouth = isSpeaking ? Math.min(1, Math.max(0, props.audioLevel * 2.25)) : 0
     manager?.setValue('aa', mouth)
     if (time >= nextBlinkAt && !blinkUntil) {
@@ -325,6 +327,14 @@ function updateAvatar(time: number) {
       currentVrm.scene.rotation.y = slowLook * motion.bodyTurn
       currentVrm.scene.rotation.z = Math.sin(elapsed * 0.86) * motion.sway
       currentVrm.scene.position.y = breath + (isSpeaking ? Math.sin(elapsed * 5.4) * 0.004 : 0)
+    }
+    if (hasNaturalMotion && isSpeaking) {
+      const accentProgress = (elapsed % 7.2) / 1.8
+      const accent = accentProgress < 1 ? Math.sin(accentProgress * Math.PI) ** 2 : 0
+      currentVrm.scene.rotation.y = Math.sin(elapsed * 1.15) * 0.006 + accent * 0.025
+      currentVrm.scene.rotation.z = Math.sin(elapsed * 0.72) * 0.004 - accent * 0.008
+      currentVrm.scene.position.x = accent * 0.006
+      currentVrm.scene.position.y = Math.sin(elapsed * 2.4) * 0.002
     }
     if (!hasNaturalMotion && headNode && headRestQuaternion) {
       headOffsetEuler.set(

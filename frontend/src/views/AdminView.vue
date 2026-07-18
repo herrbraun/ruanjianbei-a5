@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ArrowRight, Collection, DataAnalysis, Location, Picture, Tickets, UserFilled } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
 import { computed, onMounted, ref } from 'vue'
 
 import { getAnalyticsOverview, type AnalyticsOverview } from '@/api/analytics'

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Clock, Download, Printer, Refresh, Warning } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 

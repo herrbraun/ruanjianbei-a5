@@ -4,7 +4,7 @@
 
 管理端的“数字人形象管理”支持按“人物身份 + VRM 外观/服装版本”维护讲解员，控制每个景区可见版本、唯一默认人物和排序。游客端只会看到当前景区生效的版本，并会在浏览器本地记住个人选择。
 
-VRM 文件保存在本地 `backend/uploads/avatars/`，上传限制为 80MB，服务端检查 `.vrm` 与 GLB 文件头。执行 `alembic upgrade head` 后，可用 `backend/scripts/seed_avatars.py` 将十个自制灵山讲解员导入指定景区；TTS 播放会驱动 VRM 的待机、思考、聆听、眨眼和音量嘴型。语音支持后台在火山引擎实时 TTS 与千问 TTS 间配置默认、备用和人物专属音色，游客端按 24kHz PCM 分片边接收边播放。WebGL 或模型加载失败时仍可使用文本与音频讲解。
+VRM 文件保存在本地 `backend/uploads/avatars/`，上传限制为 80MB，服务端检查 `.vrm` 与 GLB 文件头。执行 `alembic upgrade head` 后，可用 `backend/scripts/seed_avatars.py` 将十个自制灵山讲解员导入指定景区；游客端只下载当前选中的一个模型，模型接口支持私有长期缓存、ETag 和字节范围请求，Three.js/VRM 运行时在进入数字人舞台后才按需加载。TTS 播放会驱动 VRM 的待机、思考、聆听、眨眼和音量嘴型，并根据欢迎、路线与方向语义切换动作；语音支持后台在火山引擎实时 TTS 与千问 TTS 间配置默认、备用和人物专属音色，游客端按 24kHz PCM 分片边接收边播放。WebGL 或模型加载失败时仍可使用文本与音频讲解。
 
 项目默认使用 `pgvector` 检索。向量在 PostgreSQL 中固定保存为 `DOUBLE PRECISION[]`（SQLite 测试环境保存为 JSON），因此切换 `RAG_VECTOR_BACKEND` 不会改变表结构。若本机 PostgreSQL 未安装该扩展，可仅在本地 `backend/.env` 或 `backend/.env.docker` 设置 `RAG_VECTOR_BACKEND=json`；该模式在应用侧计算余弦距离，并受 `RAG_JSON_CANDIDATE_LIMIT`（默认 2000 条）保护，适合比赛演示和中小型资料库。
 

@@ -87,6 +87,24 @@ def test_admin_can_publish_vrm_and_visitor_only_reads_enabled_variant(
     )
     assert asset_response.status_code == 200
     assert asset_response.content.startswith(b"glTF")
+    assert asset_response.headers["accept-ranges"] == "bytes"
+    assert asset_response.headers["cache-control"] == "private, max-age=31536000, immutable"
+    assert asset_response.headers["etag"]
+
+    cached_response = client.get(
+        f"/api/avatars/scenic-areas/avatar-test/variants/{avatar['id']}/asset",
+        headers={**visitor_headers, "If-None-Match": asset_response.headers["etag"]},
+    )
+    assert cached_response.status_code == 304
+    assert cached_response.content == b""
+
+    range_response = client.get(
+        f"/api/avatars/scenic-areas/avatar-test/variants/{avatar['id']}/asset",
+        headers={**visitor_headers, "Range": "bytes=0-3"},
+    )
+    assert range_response.status_code == 206
+    assert range_response.content == b"glTF"
+    assert range_response.headers["content-range"] == f"bytes 0-3/{len(VALID_GLB_HEADER)}"
 
     disable_response = client.patch(
         f"/api/admin/avatars/scenic-configs/{avatar['config_id']}",

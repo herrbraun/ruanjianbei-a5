@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -334,9 +334,10 @@ def read_public_scenic_avatars(
 def download_scenic_avatar_asset(
     scenic_area_code: str,
     avatar_variant_id: int,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> FileResponse:
+) -> Response:
     scenic_area = get_scenic_area_by_code(db, scenic_area_code)
     if scenic_area is None:
         raise _not_found("景区不存在")
@@ -351,4 +352,26 @@ def download_scenic_avatar_asset(
     path = storage_path(config.avatar_variant.stored_filename)
     if not path.exists():
         raise _not_found("数字人模型文件不存在")
-    return FileResponse(path, media_type="model/gltf-binary", filename=config.avatar_variant.original_filename)
+    cache_headers = {
+        "Cache-Control": "private, max-age=31536000, immutable",
+        "Vary": "Authorization",
+    }
+    response = FileResponse(
+        path,
+        media_type="model/gltf-binary",
+        filename=config.avatar_variant.original_filename,
+        content_disposition_type="inline",
+        headers=cache_headers,
+        stat_result=path.stat(),
+    )
+    if request.headers.get("if-none-match") == response.headers.get("etag"):
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers={
+                **cache_headers,
+                "ETag": response.headers["etag"],
+                "Last-Modified": response.headers["last-modified"],
+                "Accept-Ranges": "bytes",
+            },
+        )
+    return response

@@ -16,8 +16,8 @@ async function renderChart() {
   if (props.empty) return
   await nextTick()
   if (!chartRoot.value) return
-  const echarts = await import('echarts')
-  chart ||= echarts.init(chartRoot.value)
+  const { init } = await import('@/services/chartRuntime')
+  chart ||= init(chartRoot.value)
   chart.setOption(props.option, true)
   resizeObserver ||= new ResizeObserver(() => chart?.resize())
   resizeObserver.observe(chartRoot.value)

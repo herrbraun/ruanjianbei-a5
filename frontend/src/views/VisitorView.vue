@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { ArrowLeft, ArrowRight, Compass, Document, Loading, Microphone, Position, VideoPlay } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import AvatarViewer from '@/components/AvatarViewer.vue'
 import { avatarApi, avatarAssetUrl, type ScenicAvatar } from '@/api/avatar'
 import { guideApi, guideSpeechStreamUrl, type GuideFeedbackTag, type GuideMessage, type GuideSource } from '@/api/guide'
 import { knowledgeApi, type ScenicArea } from '@/api/knowledge'
@@ -15,6 +13,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useGuideStore } from '@/stores/guide'
 import { useScenicStore } from '@/stores/scenic'
 
+const AvatarViewer = defineAsyncComponent(() => import('@/components/AvatarViewer.vue'))
 const guideStore = useGuideStore()
 const authStore = useAuthStore()
 const scenicStore = useScenicStore()
@@ -60,11 +59,13 @@ let recordTimer: ReturnType<typeof setInterval> | undefined
 let recordLimitTimer: ReturnType<typeof setTimeout> | undefined
 let playbackGeneration = 0
 let avatarGestureTimer: ReturnType<typeof setTimeout> | undefined
+let pendingSpeechGesture: 'welcome' | 'guiding' | undefined
 const pcmPlayer = new StreamingPcmPlayer({
   onFirstAudio: () => {
     speechLoadingMessageId.value = undefined
     if (activeAudioMessageId.value) playingMessageId.value = activeAudioMessageId.value
-    triggerAvatarGesture('guiding', 1_800)
+    if (pendingSpeechGesture) triggerAvatarGesture(pendingSpeechGesture, 1_600)
+    pendingSpeechGesture = undefined
   },
   onLevel: (level) => { audioLevel.value = level },
   onEnded: () => stopAudio(),
@@ -155,6 +156,12 @@ function triggerAvatarGesture(gesture: 'welcome' | 'guiding', duration: number) 
 
 function requestAvatarWelcome() {
   avatarWelcomeRequest.value += 1
+}
+
+function inferSpeechGesture(content: string): 'welcome' | 'guiding' | undefined {
+  if (/(欢迎|您好|你好|很高兴|来到.+景区)/.test(content)) return 'welcome'
+  if (/(路线|方向|前往|沿着|步行|入口|出口|左转|右转|上一站|下一站|继续向前)/.test(content)) return 'guiding'
+  return undefined
 }
 
 async function loadScenicAvatars() {
@@ -396,6 +403,7 @@ function stopAudio() {
   speechLoadingMessageId.value = undefined
   activeAudioMessageId.value = undefined
   audioLevel.value = 0
+  pendingSpeechGesture = undefined
   clearAvatarGesture()
 }
 
@@ -423,6 +431,7 @@ async function playMessage(message: GuideMessage) {
   const generation = playbackGeneration
   speechLoadingMessageId.value = message.id
   activeAudioMessageId.value = message.id
+  pendingSpeechGesture = inferSpeechGesture(displayMessageContent(message.content))
   try {
     const token = authStore.token || await authStore.recoverGuestSession()
     await pcmPlayer.play(
