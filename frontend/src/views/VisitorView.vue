@@ -274,6 +274,10 @@ async function startGuide(routePlanId?: number, currentSpotId?: number) {
   }
 }
 
+function buildRouteIntroductionQuestion(sequence: number, spotName: string) {
+  return `我们现在到达路线第 ${sequence} 站“${spotName}”，请为我介绍一下这里。`
+}
+
 async function sendRouteIntroduction(spotId?: number) {
   const context = activeRouteContext.value
   if (!context || routeControlsBusy.value) return
@@ -284,7 +288,7 @@ async function sendRouteIntroduction(spotId?: number) {
     if (target.spot_id !== context.current_spot_id) await guideStore.setRouteStop(context.route_plan_id, target.spot_id)
     await router.replace({ path: route.path, query: { route_id: String(context.route_plan_id), spot_id: String(target.spot_id) } })
     triggerAvatarGesture('guiding', 2200)
-    draft.value = `我们现在到达路线第 ${target.sequence} 站“${target.name}”。请结合我的兴趣“${context.interest}”主动讲解这一站，并简要告诉我它与后续行程的联系。`
+    draft.value = buildRouteIntroductionQuestion(target.sequence, target.name)
     await sendQuestion()
   } catch (error) {
     ElMessage.error(errorText(error, '当前站讲解启动失败，请重试'))
@@ -293,7 +297,7 @@ async function sendRouteIntroduction(spotId?: number) {
   }
 }
 
-async function moveRoute(step: number, introduce: boolean) {
+async function moveRoute(step: number) {
   const context = activeRouteContext.value
   const nextIndex = currentRouteIndex.value + step
   const target = context?.spots[nextIndex]
@@ -303,10 +307,8 @@ async function moveRoute(step: number, introduce: boolean) {
     await guideStore.setRouteStop(context.route_plan_id, target.spot_id)
     await router.replace({ path: route.path, query: { route_id: String(context.route_plan_id), spot_id: String(target.spot_id) } })
     triggerAvatarGesture('guiding', 1800)
-    if (introduce) {
-      draft.value = `我们现在到达路线第 ${target.sequence} 站“${target.name}”。请结合我的兴趣“${context.interest}”主动讲解这一站，并简要告诉我它与后续行程的联系。`
-      await sendQuestion()
-    } else ElMessage.success(`已切换到第 ${target.sequence} 站：${target.name}`)
+    draft.value = buildRouteIntroductionQuestion(target.sequence, target.name)
+    await sendQuestion()
   } catch (error) {
     ElMessage.error(errorText(error, '行程进度更新失败'))
   } finally {
@@ -368,13 +370,13 @@ async function sendQuestion() {
   draft.value = ''
   draftInputMode.value = 'text'
   try {
-    const response = await guideStore.send(content, inputMode)
+    const responsePromise = guideStore.send(content, inputMode)
+    void scrollToLatest()
+    const response = await responsePromise
     if (response.assistant_message.status === 'failed') ElMessage.warning('导览回答暂时不可用，请稍后再试')
     await scrollToLatest()
     if (response.assistant_message.status === 'success') void playMessage(response.assistant_message)
   } catch (error) {
-    draft.value = content
-    draftInputMode.value = inputMode
     ElMessage.error(errorText(error, '导览回答失败，请稍后再试'))
   }
 }
@@ -611,10 +613,9 @@ onBeforeUnmount(() => {
             <p>{{ currentRouteSpot.reason }}</p>
           </div>
           <div class="guide-route-actions">
-            <el-button size="small" :icon="ArrowLeft" :disabled="!hasPreviousRouteSpot || routeControlsBusy" @click="moveRoute(-1, false)">上一站</el-button>
+            <el-button size="small" :icon="ArrowLeft" :disabled="!hasPreviousRouteSpot || routeControlsBusy" @click="moveRoute(-1)">上一站</el-button>
             <el-button size="small" plain :disabled="routeControlsBusy" @click="sendRouteIntroduction()">讲解当前站</el-button>
-            <el-button size="small" :icon="ArrowRight" :disabled="!hasNextRouteSpot || routeControlsBusy" @click="moveRoute(1, false)">下一站</el-button>
-            <el-button size="small" type="primary" :disabled="!hasNextRouteSpot || routeControlsBusy" @click="moveRoute(1, true)">继续导览</el-button>
+            <el-button size="small" type="primary" :icon="ArrowRight" :disabled="!hasNextRouteSpot || routeControlsBusy" @click="moveRoute(1)">下一站并讲解</el-button>
           </div>
           <div class="guide-route-dots" aria-hidden="true"><i v-for="spot in activeRouteContext.spots" :key="spot.spot_id" :class="{ active: spot.spot_id === activeRouteContext.current_spot_id, passed: spot.sequence < currentRouteSpot.sequence }" /></div>
         </section>
@@ -665,8 +666,11 @@ onBeforeUnmount(() => {
                   </div>
                   <div
                     class="guide-message-content"
-                    :class="{ failed: message.status === 'failed', 'is-collapsible': messageIsLong(message), 'is-expanded': messageIsExpanded(message.id) }"
-                  >{{ displayMessageContent(message.content) }}</div>
+                    :class="{ pending: message.status === 'pending', failed: message.status === 'failed', 'is-collapsible': messageIsLong(message), 'is-expanded': messageIsExpanded(message.id) }"
+                  >
+                    <el-icon v-if="message.status === 'pending'" class="is-loading"><Loading /></el-icon>
+                    <span>{{ displayMessageContent(message.content) }}</span>
+                  </div>
                   <button v-if="messageIsLong(message)" class="guide-answer-expand" type="button" @click="toggleMessageExpansion(message.id)">
                     {{ messageIsExpanded(message.id) ? '收起详细讲解' : '展开详细讲解' }}
                   </button>

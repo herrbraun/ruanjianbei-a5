@@ -18,6 +18,29 @@ function storageKey(scenicAreaCode: string, routePlanId?: number) {
     : `guide_session:${scenicAreaCode}`
 }
 
+let optimisticMessageId = -1
+
+function createOptimisticMessage(
+  sessionId: number,
+  role: 'user' | 'assistant',
+  content: string,
+  inputMode: 'text' | 'voice' | null,
+): GuideMessage {
+  return {
+    id: optimisticMessageId--,
+    session_id: sessionId,
+    role,
+    input_mode: inputMode,
+    content,
+    rag_profile_id: null,
+    sources: null,
+    answer_model: null,
+    answer_duration_ms: null,
+    status: role === 'user' ? 'success' : 'pending',
+    created_at: new Date().toISOString(),
+  }
+}
+
 export const useGuideStore = defineStore('guide', {
   state: (): GuideState => ({
     activeSession: null,
@@ -104,11 +127,28 @@ export const useGuideStore = defineStore('guide', {
     async send(content: string, inputMode: 'text' | 'voice') {
       if (!this.activeSession) throw new Error('Guide session is not ready')
       if (this.sending) throw new Error('Guide request is already in progress')
+      const sessionId = this.activeSession.id
+      const visitorMessage = createOptimisticMessage(sessionId, 'user', content, inputMode)
+      const assistantMessage = createOptimisticMessage(sessionId, 'assistant', '正在组织讲解…', null)
+      this.messages.push(visitorMessage, assistantMessage)
       this.sending = true
       try {
-        const response = await guideApi.sendMessage(this.activeSession.id, content, inputMode)
-        this.messages.push(response.data.visitor_message, response.data.assistant_message)
+        const response = await guideApi.sendMessage(sessionId, content, inputMode)
+        const visitorIndex = this.messages.findIndex((message) => message.id === visitorMessage.id)
+        const assistantIndex = this.messages.findIndex((message) => message.id === assistantMessage.id)
+        if (visitorIndex >= 0) this.messages.splice(visitorIndex, 1, response.data.visitor_message)
+        if (assistantIndex >= 0) this.messages.splice(assistantIndex, 1, response.data.assistant_message)
         return response.data
+      } catch (error) {
+        const assistantIndex = this.messages.findIndex((message) => message.id === assistantMessage.id)
+        if (assistantIndex >= 0) {
+          this.messages.splice(assistantIndex, 1, {
+            ...assistantMessage,
+            content: '讲解暂时没有生成成功，请稍后重新提问。',
+            status: 'failed',
+          })
+        }
+        throw error
       } finally {
         this.sending = false
       }

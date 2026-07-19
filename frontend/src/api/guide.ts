@@ -55,7 +55,7 @@ export interface GuideMessage {
   sources: GuideSource[] | null
   answer_model: string | null
   answer_duration_ms: number | null
-  status: 'success' | 'failed'
+  status: 'pending' | 'success' | 'failed'
   created_at: string
 }
 

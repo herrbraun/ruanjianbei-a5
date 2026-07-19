@@ -626,6 +626,20 @@
   background: #fff7f5;
 }
 
+.guide-message-content.pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #527069;
+  background: #f4faf8;
+}
+
+.guide-message-content.pending .el-icon {
+  flex: 0 0 auto;
+  color: #1c716b;
+  font-size: 16px;
+}
+
 .guide-answer-actions {
   display: flex;
   align-items: center;

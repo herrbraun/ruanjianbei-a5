@@ -18,7 +18,7 @@ export const http = axios.create({
 })
 
 http.interceptors.request.use((config) => {
-  const token = localStorage.getItem('auth_token')
+  const token = sessionStorage.getItem('auth_token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -28,7 +28,13 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (axios.isAxiosError(error) && error.response?.status === 401 && error.config) {
+    const detail = axios.isAxiosError(error) ? error.response?.data?.detail : undefined
+    const roleMismatch = error.response?.status === 403 && (
+      detail === 'Visitor role required'
+      || detail === 'Visitor permission required'
+      || detail === 'Admin role required'
+    )
+    if (axios.isAxiosError(error) && (error.response?.status === 401 || roleMismatch) && error.config) {
       const config = error.config as RetryableRequestConfig
       if (!config._guestRetried && unauthorizedHandler) {
         config._guestRetried = true

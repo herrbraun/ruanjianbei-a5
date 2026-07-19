@@ -11,6 +11,11 @@ interface AuthState {
 let sessionInitialization: Promise<void> | null = null
 let guestInitialization: Promise<AuthResponse> | null = null
 
+// Access tokens are tab-scoped so an administrator login in one tab cannot
+// overwrite an anonymous visitor session in another tab.
+localStorage.removeItem('auth_token')
+localStorage.removeItem('auth_user')
+
 function clearVisitorSessionReferences() {
   for (let index = localStorage.length - 1; index >= 0; index -= 1) {
     const key = localStorage.key(index)
@@ -19,7 +24,7 @@ function clearVisitorSessionReferences() {
 }
 
 function readStoredUser(): UserInfo | null {
-  const raw = localStorage.getItem('auth_user')
+  const raw = sessionStorage.getItem('auth_user')
   if (!raw) {
     return null
   }
@@ -27,14 +32,14 @@ function readStoredUser(): UserInfo | null {
   try {
     return JSON.parse(raw) as UserInfo
   } catch {
-    localStorage.removeItem('auth_user')
+    sessionStorage.removeItem('auth_user')
     return null
   }
 }
 
 export const useAuthStore = defineStore('auth', {
   state: (): AuthState => ({
-    token: localStorage.getItem('auth_token'),
+    token: sessionStorage.getItem('auth_token'),
     user: readStoredUser(),
     sessionInitialized: false,
   }),
@@ -46,13 +51,13 @@ export const useAuthStore = defineStore('auth', {
     setSession(payload: AuthResponse) {
       this.token = payload.access_token
       this.user = payload.user
-      localStorage.setItem('auth_token', payload.access_token)
-      localStorage.setItem('auth_user', JSON.stringify(payload.user))
+      sessionStorage.setItem('auth_token', payload.access_token)
+      sessionStorage.setItem('auth_user', JSON.stringify(payload.user))
       this.sessionInitialized = true
     },
     setUser(user: UserInfo) {
       this.user = user
-      localStorage.setItem('auth_user', JSON.stringify(user))
+      sessionStorage.setItem('auth_user', JSON.stringify(user))
     },
     async loginAdmin(payload: { username: string; password: string }) {
       const response = await adminLogin(payload)
@@ -107,8 +112,8 @@ export const useAuthStore = defineStore('auth', {
     logout(preserveGuestKey = true) {
       this.token = null
       this.user = null
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('auth_user')
+      sessionStorage.removeItem('auth_token')
+      sessionStorage.removeItem('auth_user')
       if (!preserveGuestKey) localStorage.removeItem('guest_key')
       this.sessionInitialized = true
     },

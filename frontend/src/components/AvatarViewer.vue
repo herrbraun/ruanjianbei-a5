@@ -255,7 +255,7 @@ async function loadVrm() {
   const controller = new AbortController()
   activeLoadController = controller
   try {
-    const token = localStorage.getItem('auth_token')
+    const token = sessionStorage.getItem('auth_token')
     const response = await fetch(props.assetUrl, {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       signal: controller.signal,
