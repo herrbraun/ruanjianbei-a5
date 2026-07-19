@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
@@ -44,6 +45,7 @@ from app.schemas.guide import (
     GuideSessionOut,
     GuideFeedbackOut,
     GuideFeedbackUpsert,
+    SpeechPlaybackMetricCreate,
 )
 from app.services.guide_answer import GuideAnswerError, generate_guide_answer
 from app.services.retrieval import RetrievalError, search_profile
@@ -433,3 +435,25 @@ async def synthesize_message(
             "X-TTS-Provider": prepared.provider,
         },
     )
+
+
+@router.post("/messages/{message_id}/speech-metrics", status_code=status.HTTP_204_NO_CONTENT)
+def record_speech_playback_metric(
+    message_id: int,
+    payload: SpeechPlaybackMetricCreate,
+    current_user: User = Depends(require_visitor),
+    db: Session = Depends(get_db),
+) -> Response:
+    message = get_user_assistant_message(db, message_id, current_user.id)
+    if message is None or message.status != "success":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Guide answer not found")
+    ensure_tts_provider_settings(db)
+    provider = db.scalar(
+        select(TtsProviderSetting).where(TtsProviderSetting.provider == payload.provider)
+    )
+    if provider is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unknown TTS provider")
+    provider.last_visitor_first_chunk_ms = payload.first_chunk_ms
+    provider.last_visitor_first_chunk_at = datetime.now(timezone.utc)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

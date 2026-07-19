@@ -1,5 +1,10 @@
+export type FirstAudioMetrics = {
+  firstChunkMs: number
+  provider: 'volcengine' | 'dashscope' | null
+}
+
 type PlayerCallbacks = {
-  onFirstAudio?: () => void
+  onFirstAudio?: (metrics: FirstAudioMetrics) => void
   onLevel?: (level: number) => void
   onEnded?: () => void
 }
@@ -45,6 +50,7 @@ export class StreamingPcmPlayer {
     await this.prepare()
     this.stopSources()
     this.abortController = new AbortController()
+    const requestStartedAt = performance.now()
     let response = await this.request(url, token, body)
     if (response.status === 401) response = await this.request(url, await recoverToken(), body)
     if (!response.ok) {
@@ -52,6 +58,10 @@ export class StreamingPcmPlayer {
       throw new Error(payload?.detail || `语音合成失败（HTTP ${response.status}）`)
     }
     if (!response.body) throw new Error('浏览器无法读取实时语音流')
+    const responseProvider = response.headers.get('X-TTS-Provider')
+    const provider = responseProvider === 'volcengine' || responseProvider === 'dashscope'
+      ? responseProvider
+      : null
     this.nextStartTime = this.context!.currentTime + 0.04
     this.playing = true
     this.startLevelSampling()
@@ -83,7 +93,10 @@ export class StreamingPcmPlayer {
       this.schedule(bytes)
       if (firstAudio) {
         firstAudio = false
-        this.callbacks.onFirstAudio?.()
+        this.callbacks.onFirstAudio?.({
+          firstChunkMs: Math.round(performance.now() - requestStartedAt),
+          provider,
+        })
       }
     }
     if (!this.playing) return

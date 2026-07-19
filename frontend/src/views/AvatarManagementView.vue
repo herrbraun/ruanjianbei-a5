@@ -26,7 +26,6 @@ const humans = ref<DigitalHuman[]>([])
 const voices = ref<VoiceOption[]>([])
 const ttsProviders = ref<TtsProviderSetting[]>([])
 const testingProvider = ref<TtsProvider>()
-const testingStartedAt = ref(0)
 const testingFirstAudioMs = ref<number>()
 const loading = ref(false)
 const humanDialogVisible = ref(false)
@@ -50,8 +49,8 @@ const humanForm = reactive({
   is_enabled: true,
 })
 const providerTestPlayer = new StreamingPcmPlayer({
-  onFirstAudio: () => {
-    testingFirstAudioMs.value = Math.round(performance.now() - testingStartedAt.value)
+  onFirstAudio: ({ firstChunkMs }) => {
+    testingFirstAudioMs.value = firstChunkMs
   },
   onEnded: () => { testingProvider.value = undefined },
 })
@@ -171,7 +170,6 @@ async function saveProviderSettings() {
 async function testProvider(provider: TtsProviderSetting) {
   providerTestPlayer.stop()
   testingProvider.value = provider.provider
-  testingStartedAt.value = performance.now()
   testingFirstAudioMs.value = undefined
   try {
     await providerTestPlayer.play(
@@ -312,6 +310,16 @@ function formatBytes(value: number) {
   return `${(value / 1024 / 1024).toFixed(1)} MB`
 }
 
+function formatMetricTime(value: string | null) {
+  if (!value) return '还没有游客播放记录'
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
 watch(selectedScenicAreaId, () => void loadScenicAvatars())
 onMounted(() => void loadData())
 onBeforeUnmount(() => void providerTestPlayer.destroy())
@@ -344,8 +352,13 @@ onBeforeUnmount(() => void providerTestPlayer.destroy())
               <el-tag :type="provider.configured ? 'success' : 'danger'" effect="plain">{{ provider.configured ? '可用' : '未完成配置' }}</el-tag>
             </header>
             <div class="tts-provider-metrics">
-              <span><small>开始播放等待</small><strong>{{ provider.first_chunk_timeout_ms }} ms</strong></span>
+              <span><small>首包超时阈值</small><strong>{{ provider.first_chunk_timeout_ms }} ms</strong></span>
               <span><small>默认音色</small><strong>{{ provider.default_voice }}</strong></span>
+              <span class="tts-visitor-latency">
+                <small>最近游客首包延迟</small>
+                <strong>{{ provider.last_visitor_first_chunk_ms === null ? '暂无数据' : `${provider.last_visitor_first_chunk_ms} ms` }}</strong>
+                <em>{{ formatMetricTime(provider.last_visitor_first_chunk_at) }}</em>
+              </span>
             </div>
             <footer>
               <el-switch :model-value="provider.is_enabled" :disabled="provider.is_default || provider.is_fallback" active-text="启用" @change="updateProvider(provider, { is_enabled: Boolean($event) })" />
@@ -433,7 +446,7 @@ onBeforeUnmount(() => void providerTestPlayer.destroy())
       <el-form label-position="top" class="avatar-form">
         <el-form-item label="服务资源"><el-input v-model="providerForm.model" /></el-form-item>
         <el-form-item label="默认音色"><el-select v-model="providerForm.defaultVoice"><el-option v-for="voice in voices" :key="voice.value" :label="voice.label" :value="voice.value" /></el-select></el-form-item>
-        <el-form-item label="开始播放等待时间"><el-input-number v-model="providerForm.firstChunkTimeoutMs" :min="500" :max="10000" :step="100" /><small class="avatar-form-hint">超过此时间仍未开始播放时，系统会尝试备用服务。</small></el-form-item>
+        <el-form-item label="首包超时阈值"><el-input-number v-model="providerForm.firstChunkTimeoutMs" :min="500" :max="10000" :step="100" /><small class="avatar-form-hint">超过此时间仍未收到首个音频分片时，系统会尝试备用服务。</small></el-form-item>
       </el-form>
       <template #footer><el-button @click="providerDialogVisible = false">取消</el-button><el-button type="primary" @click="saveProviderSettings">保存设置</el-button></template>
     </el-dialog>

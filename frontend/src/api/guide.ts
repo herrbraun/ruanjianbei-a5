@@ -109,4 +109,12 @@ export const guideApi = {
     form.append('file', file, 'guide-recording.webm')
     return http.post<AsrResult>('/guide/asr', form, { timeout: AI_API_TIMEOUT_MS })
   },
+  reportSpeechMetric: (
+    messageId: number,
+    provider: 'volcengine' | 'dashscope',
+    firstChunkMs: number,
+  ) => http.post<void>(`/guide/messages/${messageId}/speech-metrics`, {
+    provider,
+    first_chunk_ms: firstChunkMs,
+  }),
 }

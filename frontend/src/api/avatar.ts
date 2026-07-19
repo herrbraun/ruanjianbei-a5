@@ -19,6 +19,8 @@ export interface TtsProviderSetting {
   model: string
   default_voice: string
   first_chunk_timeout_ms: number
+  last_visitor_first_chunk_ms: number | null
+  last_visitor_first_chunk_at: string | null
   configured: boolean
 }
 

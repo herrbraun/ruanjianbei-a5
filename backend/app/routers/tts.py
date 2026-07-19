@@ -51,6 +51,8 @@ def _out(item: TtsProviderSetting) -> TtsProviderSettingOut:
         model=item.model,
         default_voice=item.default_voice,
         first_chunk_timeout_ms=item.first_chunk_timeout_ms,
+        last_visitor_first_chunk_ms=item.last_visitor_first_chunk_ms,
+        last_visitor_first_chunk_at=item.last_visitor_first_chunk_at,
         configured=_configured(item.provider),
     )
 

@@ -5,6 +5,9 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
+from app.database import get_db
+from app.models.guide import GuideMessage, GuideSession
+from app.models.knowledge import ScenicArea
 from app.services import streaming_speech
 from app.services.speech import SpeechError
 from app.services.streaming_speech import TtsRuntimeConfig, prepare_speech_stream
@@ -53,6 +56,43 @@ def test_provider_rejects_conflicting_roles_and_unknown_voice(client: TestClient
         json={"default_voice": "Cherry"},
     )
     assert invalid_voice.status_code == 422
+
+
+def test_visitor_first_chunk_metric_updates_provider_dashboard(client: TestClient) -> None:
+    visitor = client.post(
+        "/api/auth/visitor-register",
+        json={"username": "tts_metric_visitor", "password": "password123"},
+    )
+    assert visitor.status_code == 201
+    headers = {"Authorization": f"Bearer {visitor.json()['access_token']}"}
+    user_id = visitor.json()["user"]["id"]
+    override = client.app.dependency_overrides[get_db]
+    generator = override()
+    db = next(generator)
+    try:
+        scenic = ScenicArea(code="tts-metric", name="语音指标景区", is_enabled=True)
+        db.add(scenic)
+        db.flush()
+        session = GuideSession(user_id=user_id, scenic_area_id=scenic.id)
+        db.add(session)
+        db.flush()
+        message = GuideMessage(session_id=session.id, role="assistant", content="欢迎游览", status="success")
+        db.add(message)
+        db.commit()
+        message_id = message.id
+    finally:
+        generator.close()
+
+    recorded = client.post(
+        f"/api/guide/messages/{message_id}/speech-metrics",
+        headers=headers,
+        json={"provider": "volcengine", "first_chunk_ms": 836},
+    )
+    assert recorded.status_code == 204
+    providers = client.get("/api/admin/tts/providers", headers=_admin_headers(client)).json()
+    volcengine = next(item for item in providers if item["provider"] == "volcengine")
+    assert volcengine["last_visitor_first_chunk_ms"] == 836
+    assert volcengine["last_visitor_first_chunk_at"] is not None
 
 
 def test_stream_falls_back_only_before_first_audio(monkeypatch) -> None:

@@ -114,6 +114,8 @@ class TtsProviderSettingOut(BaseModel):
     model: str
     default_voice: str
     first_chunk_timeout_ms: int
+    last_visitor_first_chunk_ms: int | None
+    last_visitor_first_chunk_at: datetime | None
     configured: bool
 
 

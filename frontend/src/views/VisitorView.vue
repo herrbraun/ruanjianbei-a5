@@ -61,11 +61,14 @@ let playbackGeneration = 0
 let avatarGestureTimer: ReturnType<typeof setTimeout> | undefined
 let pendingSpeechGesture: 'welcome' | 'guiding' | undefined
 const pcmPlayer = new StreamingPcmPlayer({
-  onFirstAudio: () => {
+  onFirstAudio: ({ firstChunkMs, provider }) => {
     speechLoadingMessageId.value = undefined
     if (activeAudioMessageId.value) playingMessageId.value = activeAudioMessageId.value
     if (pendingSpeechGesture) triggerAvatarGesture(pendingSpeechGesture, 1_600)
     pendingSpeechGesture = undefined
+    if (activeAudioMessageId.value && provider) {
+      void guideApi.reportSpeechMetric(activeAudioMessageId.value, provider, firstChunkMs).catch(() => undefined)
+    }
   },
   onLevel: (level) => { audioLevel.value = level },
   onEnded: () => stopAudio(),

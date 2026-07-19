@@ -211,6 +211,8 @@ CREATE TABLE IF NOT EXISTS tts_provider_settings (
     default_voice VARCHAR(100) NOT NULL,
     first_chunk_timeout_ms INTEGER NOT NULL DEFAULT 4500
         CHECK (first_chunk_timeout_ms BETWEEN 500 AND 10000),
+    last_visitor_first_chunk_ms INTEGER,
+    last_visitor_first_chunk_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

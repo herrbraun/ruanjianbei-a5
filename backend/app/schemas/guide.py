@@ -97,6 +97,11 @@ class AsrResponse(BaseModel):
     duration_ms: int
 
 
+class SpeechPlaybackMetricCreate(BaseModel):
+    provider: Literal["volcengine", "dashscope"]
+    first_chunk_ms: int = Field(ge=0, le=60000)
+
+
 FeedbackTag = Literal["answer_accurate", "voice_natural", "avatar_preferred", "slow_response", "unresolved"]
 
 

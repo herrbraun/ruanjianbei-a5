@@ -57,6 +57,8 @@ class TtsProviderSetting(Base):
     model: Mapped[str] = mapped_column(String(120), nullable=False)
     default_voice: Mapped[str] = mapped_column(String(100), nullable=False)
     first_chunk_timeout_ms: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("4500"))
+    last_visitor_first_chunk_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_visitor_first_chunk_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
