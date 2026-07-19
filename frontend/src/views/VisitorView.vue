@@ -32,6 +32,8 @@ const playingMessageId = ref<number>()
 const speechLoadingMessageId = ref<number>()
 const activeAudioMessageId = ref<number>()
 const conversationElement = ref<HTMLElement>()
+const showReturnToLatest = ref(false)
+const expandedMessageIds = ref<Set<number>>(new Set())
 const scenicAvatars = ref<ScenicAvatar[]>([])
 const selectedAvatarId = ref<number>()
 const avatarListLoading = ref(false)
@@ -77,6 +79,20 @@ const pcmPlayer = new StreamingPcmPlayer({
 const selectedScenicArea = computed(() => scenicAreas.value.find((area) => area.code === selectedScenicCode.value))
 const messages = computed(() => guideStore.messages)
 const hasAssistantAnswer = computed(() => messages.value.some((message) => message.role === 'assistant' && message.status === 'success'))
+const latestAssistantMessage = computed(() => (
+  [...messages.value].reverse().find((message) => message.role === 'assistant' && message.status === 'success')
+))
+const stageMessage = computed(() => (
+  messages.value.find((message) => message.id === playingMessageId.value)
+  || latestAssistantMessage.value
+))
+const stageMessageExcerpt = computed(() => {
+  const content = stageMessage.value ? displayMessageContent(stageMessage.value.content) : ''
+  if (!content) return ''
+  const sentenceMatch = content.match(/^.{1,88}?[。！？!?](?:.{1,38}?[。！？!?])?/)
+  const excerpt = sentenceMatch?.[0] || content.slice(0, 112)
+  return `${excerpt}${excerpt.length < content.length && !/[。！？!?]$/.test(excerpt) ? '…' : ''}`
+})
 const sessionReady = computed(() => guideStarted.value && Boolean(guideStore.activeSession && !guideStore.loadingMessages))
 const activeAvatar = computed(() => scenicAvatars.value.find((avatar) => avatar.id === selectedAvatarId.value))
 const activeRouteContext = computed(() => guideStore.activeRouteContext)
@@ -125,7 +141,32 @@ function displayMessageContent(content: string) {
 
 async function scrollToLatest() {
   await nextTick()
-  if (conversationElement.value) conversationElement.value.scrollTop = conversationElement.value.scrollHeight
+  if (conversationElement.value) {
+    conversationElement.value.scrollTop = conversationElement.value.scrollHeight
+    showReturnToLatest.value = false
+  }
+}
+
+function handleConversationScroll() {
+  const element = conversationElement.value
+  if (!element) return
+  const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight
+  showReturnToLatest.value = distanceFromBottom > 120
+}
+
+function messageIsLong(message: GuideMessage) {
+  return message.role === 'assistant' && displayMessageContent(message.content).length > 180
+}
+
+function messageIsExpanded(messageId: number) {
+  return expandedMessageIds.value.has(messageId)
+}
+
+function toggleMessageExpansion(messageId: number) {
+  const next = new Set(expandedMessageIds.value)
+  if (next.has(messageId)) next.delete(messageId)
+  else next.add(messageId)
+  expandedMessageIds.value = next
 }
 
 async function loadScenicAreas() {
@@ -513,7 +554,9 @@ async function saveFeedback() {
   }
 }
 
-watch(messages, () => void scrollToLatest(), { deep: true })
+watch(messages, () => {
+  if (!showReturnToLatest.value) void scrollToLatest()
+}, { deep: true })
 watch(() => guideStore.activeSession?.id, () => void loadFeedback())
 
 onMounted(() => void initializeGuidePage())
@@ -528,7 +571,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <AppLayout title="随身讲解" description="听景点故事，随时询问游览中的问题。" role-label="景区导览">
+  <AppLayout title="随身讲解" description="听景点故事，随时询问游览中的问题。" role-label="景区导览" immersive>
     <section class="guide-page" v-loading="loadingAreas">
       <article v-if="!guideStarted" class="guide-launch-card">
         <p class="eyebrow">选择目的地</p>
@@ -576,8 +619,8 @@ onBeforeUnmount(() => {
           <div class="guide-route-dots" aria-hidden="true"><i v-for="spot in activeRouteContext.spots" :key="spot.spot_id" :class="{ active: spot.spot_id === activeRouteContext.current_spot_id, passed: spot.sequence < currentRouteSpot.sequence }" /></div>
         </section>
 
-        <div ref="conversationElement" class="guide-message-stream">
-          <section class="guide-assistant-intro" :aria-busy="avatarListLoading">
+        <div class="guide-workspace">
+          <section class="guide-stage-pane guide-assistant-intro" :aria-busy="avatarListLoading">
             <div class="guide-assistant-intro-top">
               <div class="guide-avatar-picker" v-if="scenicAvatars.length">
                 <label for="visitor-avatar-select">选择讲解员</label>
@@ -587,7 +630,7 @@ onBeforeUnmount(() => {
               </div>
               <span v-else-if="!avatarListLoading" class="guide-avatar-empty">可以使用文字或语音听讲解。</span>
             </div>
-            <div class="guide-assistant-presence">
+            <div class="guide-stage-presence">
               <div class="guide-avatar-canvas guide-assistant-avatar" :class="`is-${avatarMotion}`">
                 <AvatarViewer :asset-url="avatarAsset" :state="avatarMotion" :audio-level="audioLevel" :welcome-request="avatarWelcomeRequest" @error="onAvatarRenderError">
                   <div class="guide-avatar-fallback">
@@ -598,77 +641,88 @@ onBeforeUnmount(() => {
                 </AvatarViewer>
                 <span class="guide-avatar-state"><i />{{ avatarMotion === 'speaking' ? '正在讲解' : avatarMotion === 'thinking' ? '正在思考' : avatarMotion === 'guiding' ? '正在指引' : avatarMotion === 'welcome' ? '正在问候' : avatarMotion === 'listening' ? '正在聆听' : '随时为您服务' }}</span>
               </div>
-              <div class="guide-welcome-bubble">
+              <div class="guide-welcome-bubble guide-stage-caption" aria-live="polite">
                 <span>{{ activeAvatar?.name || '景区讲解员' }}</span>
-                <strong>{{ currentRouteSpot ? `路线第 ${currentRouteSpot.sequence} 站：${currentRouteSpot.name}` : `欢迎来到${selectedScenicArea?.name || '景区'}！` }}</strong>
-                <p>{{ currentRouteSpot ? `我会按“${activeRouteContext?.interest}”偏好介绍沿途景点，并陪你走完这条路线。` : '想了解景点故事、游览路线，还是今天的演出安排？直接问我吧。' }}</p>
+                <strong>{{ stageMessage ? (playingMessageId ? '正在为你讲解' : '最新讲解') : currentRouteSpot ? `路线第 ${currentRouteSpot.sequence} 站：${currentRouteSpot.name}` : `欢迎来到${selectedScenicArea?.name || '景区'}！` }}</strong>
+                <p>{{ stageMessageExcerpt || (currentRouteSpot ? `我会按“${activeRouteContext?.interest}”偏好介绍沿途景点，并陪你走完这条路线。` : '想了解景点故事、游览路线，还是今天的演出安排？直接问我吧。') }}</p>
               </div>
             </div>
             <p v-if="avatarRenderError" class="guide-avatar-error">{{ avatarRenderError }}</p>
           </section>
 
-          <div v-if="guideStore.loadingMessages" class="guide-empty-state"><el-icon class="is-loading"><Loading /></el-icon>正在准备之前的讲解内容…</div>
-          <p v-else-if="!messages.length" class="guide-question-nudge">试着问问“这里有哪些必看的景点？”也可以按下麦克风直接说出来。</p>
+          <section class="guide-chat-pane">
+            <div ref="conversationElement" class="guide-message-stream" @scroll.passive="handleConversationScroll">
+              <div v-if="guideStore.loadingMessages" class="guide-empty-state"><el-icon class="is-loading"><Loading /></el-icon>正在准备之前的讲解内容…</div>
+              <p v-else-if="!messages.length" class="guide-question-nudge">试着问问“这里有哪些必看的景点？”也可以按下麦克风直接说出来。</p>
 
-          <article v-for="message in messages" :key="message.id" class="guide-message" :class="`is-${message.role}`">
-            <div class="guide-message-avatar">{{ message.role === 'user' ? '游' : '导' }}</div>
-            <div class="guide-message-body">
-              <div class="guide-message-meta">
-                <strong>{{ message.role === 'user' ? '我的问题' : '讲解员' }}</strong>
-                <span v-if="message.input_mode === 'voice'">语音输入</span>
-                <time>{{ formatTime(message.created_at) }}</time>
-              </div>
-              <div class="guide-message-content" :class="{ failed: message.status === 'failed' }">{{ displayMessageContent(message.content) }}</div>
-
-              <template v-if="message.role === 'assistant' && message.status === 'success'">
-                <div class="guide-answer-actions">
-                  <el-button size="small" type="primary" plain :icon="VideoPlay" :loading="speechLoadingMessageId === message.id" @click="playMessage(message)">
-                    {{ speechButtonText(message) }}
-                  </el-button>
-                </div>
-                <details v-if="message.sources?.length" class="guide-sources">
-                  <summary><Document /> 查看参考内容</summary>
-                  <div class="guide-source-list">
-                    <article v-for="source in message.sources" :key="source.chunk_id" class="guide-source-card">
-                      <div><strong>{{ sourceTitle(source) }}</strong></div>
-                      <p>{{ source.content }}</p>
-                    </article>
+              <article v-for="message in messages" :key="message.id" class="guide-message" :class="`is-${message.role}`">
+                <div class="guide-message-avatar">{{ message.role === 'user' ? '游' : '导' }}</div>
+                <div class="guide-message-body">
+                  <div class="guide-message-meta">
+                    <strong>{{ message.role === 'user' ? '我的问题' : '讲解员' }}</strong>
+                    <span v-if="message.input_mode === 'voice'">语音输入</span>
+                    <time>{{ formatTime(message.created_at) }}</time>
                   </div>
-                </details>
-              </template>
+                  <div
+                    class="guide-message-content"
+                    :class="{ failed: message.status === 'failed', 'is-collapsible': messageIsLong(message), 'is-expanded': messageIsExpanded(message.id) }"
+                  >{{ displayMessageContent(message.content) }}</div>
+                  <button v-if="messageIsLong(message)" class="guide-answer-expand" type="button" @click="toggleMessageExpansion(message.id)">
+                    {{ messageIsExpanded(message.id) ? '收起详细讲解' : '展开详细讲解' }}
+                  </button>
+
+                  <template v-if="message.role === 'assistant' && message.status === 'success'">
+                    <div class="guide-answer-actions">
+                      <el-button size="small" type="primary" plain :icon="VideoPlay" :loading="speechLoadingMessageId === message.id" @click="playMessage(message)">
+                        {{ speechButtonText(message) }}
+                      </el-button>
+                    </div>
+                    <details v-if="message.sources?.length" class="guide-sources">
+                      <summary><Document /> 查看参考内容</summary>
+                      <div class="guide-source-list">
+                        <article v-for="source in message.sources" :key="source.chunk_id" class="guide-source-card">
+                          <div><strong>{{ sourceTitle(source) }}</strong></div>
+                          <p>{{ source.content }}</p>
+                        </article>
+                      </div>
+                    </details>
+                  </template>
+                </div>
+              </article>
+
+              <details v-if="hasAssistantAnswer" class="guide-feedback-card">
+                <summary>{{ feedbackSubmitted ? '已提交体验评价' : '本次导览体验如何？' }}</summary>
+                <div v-loading="feedbackLoading" class="guide-feedback-form">
+                  <div class="guide-feedback-rating">
+                    <span>整体满意度</span>
+                    <el-rate v-model="feedbackForm.rating" show-text :texts="['很不满意', '不满意', '一般', '满意', '非常满意']" />
+                  </div>
+                  <el-checkbox-group v-model="feedbackForm.tags" class="guide-feedback-tags">
+                    <el-checkbox-button v-for="option in feedbackTagOptions" :key="option.value" :value="option.value">{{ option.label }}</el-checkbox-button>
+                  </el-checkbox-group>
+                  <el-input v-model="feedbackForm.comment" type="textarea" :rows="2" maxlength="1000" show-word-limit placeholder="还可以告诉我们哪里做得好，或哪里需要改进（选填）" />
+                  <el-button type="primary" :loading="feedbackSaving" @click="saveFeedback">{{ feedbackSubmitted ? '更新评价' : '提交评价' }}</el-button>
+                </div>
+              </details>
             </div>
-          </article>
+            <button v-if="showReturnToLatest" class="guide-return-latest" type="button" @click="scrollToLatest">回到最新</button>
+
+            <footer class="guide-composer">
+              <div class="guide-composer-mode" :class="{ voice: draftInputMode === 'voice' }">
+                <Microphone v-if="draftInputMode === 'voice'" />
+                <span>{{ draftInputMode === 'voice' ? '已转成文字，可修改后发送' : '文字提问' }}</span>
+              </div>
+              <el-input v-model="draft" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" :disabled="!sessionReady || guideStore.sending" placeholder="例如：九龙灌浴几点表演？" @keydown.enter.exact.prevent="sendQuestion" />
+              <div class="guide-composer-actions">
+                <el-button class="guide-record-button" :class="{ recording }" :loading="transcribing" :disabled="!sessionReady || guideStore.sending || transcribing" @click="recording ? stopRecording() : startRecording()">
+                  <Microphone />
+                  {{ transcribing ? '正在识别…' : recording ? `结束说话 ${recordingSeconds}s` : '开始说话' }}
+                </el-button>
+                <el-button type="primary" :icon="Position" :loading="guideStore.sending" :disabled="!sessionReady || transcribing" @click="sendQuestion">发送提问</el-button>
+              </div>
+            </footer>
+          </section>
         </div>
-
-        <details v-if="hasAssistantAnswer" class="guide-feedback-card">
-          <summary>{{ feedbackSubmitted ? '已提交体验评价' : '本次导览体验如何？' }}</summary>
-          <div v-loading="feedbackLoading" class="guide-feedback-form">
-            <div class="guide-feedback-rating">
-              <span>整体满意度</span>
-              <el-rate v-model="feedbackForm.rating" show-text :texts="['很不满意', '不满意', '一般', '满意', '非常满意']" />
-            </div>
-            <el-checkbox-group v-model="feedbackForm.tags" class="guide-feedback-tags">
-              <el-checkbox-button v-for="option in feedbackTagOptions" :key="option.value" :value="option.value">{{ option.label }}</el-checkbox-button>
-            </el-checkbox-group>
-            <el-input v-model="feedbackForm.comment" type="textarea" :rows="2" maxlength="1000" show-word-limit placeholder="还可以告诉我们哪里做得好，或哪里需要改进（选填）" />
-            <el-button type="primary" :loading="feedbackSaving" @click="saveFeedback">{{ feedbackSubmitted ? '更新评价' : '提交评价' }}</el-button>
-          </div>
-        </details>
-
-        <footer class="guide-composer">
-          <div class="guide-composer-mode" :class="{ voice: draftInputMode === 'voice' }">
-            <Microphone v-if="draftInputMode === 'voice'" />
-            <span>{{ draftInputMode === 'voice' ? '已转成文字，可修改后发送' : '文字提问' }}</span>
-          </div>
-          <el-input v-model="draft" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" :disabled="!sessionReady || guideStore.sending" placeholder="例如：九龙灌浴几点表演？" @keydown.enter.exact.prevent="sendQuestion" />
-          <div class="guide-composer-actions">
-            <el-button class="guide-record-button" :class="{ recording }" :loading="transcribing" :disabled="!sessionReady || guideStore.sending || transcribing" @click="recording ? stopRecording() : startRecording()">
-              <Microphone />
-              {{ transcribing ? '正在识别…' : recording ? `结束说话 ${recordingSeconds}s` : '开始说话' }}
-            </el-button>
-            <el-button type="primary" :icon="Position" :loading="guideStore.sending" :disabled="!sessionReady || transcribing" @click="sendQuestion">发送提问</el-button>
-          </div>
-        </footer>
       </article>
     </section>
   </AppLayout>

@@ -1859,6 +1859,500 @@
   }
 }
 
+/* Immersive guide workspace: stage and conversation remain visible together */
+.guide-page {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  margin: 0;
+}
+
+.guide-conversation-card {
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.guide-conversation-card.has-route-context {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.guide-conversation-heading {
+  padding: 15px 22px;
+}
+
+.guide-conversation-heading .eyebrow {
+  margin-bottom: 2px;
+}
+
+.guide-conversation-heading h2 {
+  margin-top: 3px;
+  font-size: 22px;
+}
+
+.guide-workspace {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: minmax(310px, 0.8fr) minmax(460px, 1.2fr);
+  overflow: hidden;
+  background: #fbfcfa;
+}
+
+.guide-stage-pane {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px 18px 18px;
+  border-right: 1px solid var(--guide-line);
+  border-bottom: 0;
+  background:
+    radial-gradient(circle at 88% 7%, rgba(190, 139, 36, 0.12), transparent 120px),
+    linear-gradient(145deg, rgba(15, 118, 110, 0.075), transparent 56%),
+    #fffefa;
+}
+
+.guide-stage-pane .guide-assistant-intro-top {
+  min-height: 34px;
+  justify-content: space-between;
+}
+
+.guide-stage-pane .guide-avatar-picker {
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.guide-stage-presence {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: minmax(230px, 1fr) auto;
+  gap: 12px;
+}
+
+.guide-stage-pane .guide-assistant-avatar {
+  width: min(100%, 440px);
+  height: 100%;
+  min-height: 230px;
+  margin: 0 auto;
+}
+
+.guide-stage-caption {
+  width: min(100%, 540px);
+  max-height: 150px;
+  margin: 0 auto;
+  overflow: hidden;
+  padding: 16px 18px;
+  border-radius: 16px 16px 16px 5px;
+}
+
+.guide-stage-caption::before {
+  top: -7px;
+  left: 31px;
+  width: 14px;
+  height: 14px;
+  transform: rotate(135deg);
+}
+
+.guide-stage-caption strong {
+  margin-top: 8px;
+  font-size: 18px;
+}
+
+.guide-stage-caption p {
+  display: -webkit-box;
+  margin-top: 5px;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.65;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.guide-chat-pane {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: #fbfcfa;
+}
+
+.guide-chat-pane .guide-message-stream {
+  min-height: 0;
+  max-height: none;
+  padding: 24px clamp(20px, 3vw, 38px) 30px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.guide-chat-pane .guide-question-nudge {
+  margin-inline: 0;
+}
+
+.guide-chat-pane .guide-message {
+  width: min(92%, 760px);
+  margin-inline: 0;
+}
+
+.guide-chat-pane .guide-feedback-card {
+  width: 100%;
+  margin: 8px 0 0;
+}
+
+.guide-chat-pane .guide-composer {
+  position: relative;
+  z-index: 4;
+  padding: 13px 20px 16px;
+  box-shadow: 0 -12px 30px rgba(35, 65, 58, 0.045);
+}
+
+.guide-return-latest {
+  position: absolute;
+  z-index: 8;
+  right: 24px;
+  bottom: 156px;
+  padding: 8px 13px;
+  border: 1px solid #9fc8c0;
+  border-radius: 999px;
+  color: #176b63;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 22px rgba(24, 83, 73, 0.14);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.guide-answer-expand {
+  display: none;
+}
+
+@media (min-width: 1440px) {
+  .guide-workspace {
+    grid-template-columns: minmax(390px, 0.76fr) minmax(600px, 1.24fr);
+  }
+
+  .guide-stage-pane {
+    padding-inline: 26px;
+  }
+}
+
+@media (max-width: 860px) {
+  .guide-workspace {
+    grid-template-columns: minmax(270px, 0.82fr) minmax(390px, 1.18fr);
+  }
+
+  .guide-stage-pane {
+    padding-inline: 13px;
+  }
+
+  .guide-stage-pane .guide-avatar-picker {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .guide-stage-pane .guide-avatar-picker .el-select {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .guide-page,
+  .guide-conversation-card {
+    height: 100%;
+  }
+
+  .guide-conversation-card {
+    border: 0;
+    grid-template-rows: auto minmax(0, 1fr);
+    box-shadow: none;
+  }
+
+  .guide-conversation-card.has-route-context {
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .guide-conversation-heading {
+    min-height: 62px;
+    align-items: center;
+    flex-direction: row;
+    gap: 8px;
+    padding: 9px 13px;
+  }
+
+  .guide-conversation-heading .eyebrow {
+    display: none;
+  }
+
+  .guide-conversation-heading h2 {
+    margin: 0;
+    font-size: 19px;
+    white-space: nowrap;
+  }
+
+  .guide-conversation-tools {
+    width: auto;
+    min-width: 0;
+    margin-left: auto;
+    justify-content: flex-end;
+  }
+
+  .guide-conversation-tools .el-button {
+    display: none;
+  }
+
+  .guide-session-status {
+    font-size: 11px;
+  }
+
+  .guide-route-progress {
+    gap: 8px;
+    padding: 9px 12px 8px;
+  }
+
+  .guide-route-progress-main {
+    gap: 1px;
+  }
+
+  .guide-route-progress-main > span {
+    font-size: 9px;
+  }
+
+  .guide-route-progress-main > strong {
+    font-size: 15px;
+  }
+
+  .guide-route-progress-main > p {
+    display: none;
+  }
+
+  .guide-route-actions {
+    display: flex;
+    overflow-x: auto;
+    gap: 6px;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .guide-route-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .guide-route-actions .el-button {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .guide-route-dots {
+    gap: 4px;
+  }
+
+  .guide-route-dots i {
+    width: 14px;
+  }
+
+  .guide-workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: clamp(250px, 34dvh, 310px) minmax(0, 1fr);
+  }
+
+  .guide-conversation-card.has-route-context .guide-workspace {
+    grid-template-rows: clamp(210px, 28dvh, 255px) minmax(0, 1fr);
+  }
+
+  .guide-stage-pane {
+    display: block;
+    padding: 9px 12px 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--guide-line);
+    overflow: hidden;
+  }
+
+  .guide-stage-pane .guide-assistant-intro-top {
+    position: absolute;
+    z-index: 8;
+    top: 9px;
+    right: 12px;
+    left: 12px;
+    min-height: 32px;
+    pointer-events: none;
+  }
+
+  .guide-stage-pane .guide-avatar-picker {
+    align-items: flex-end;
+    pointer-events: auto;
+  }
+
+  .guide-stage-pane .guide-avatar-picker label {
+    display: none;
+  }
+
+  .guide-stage-pane .guide-avatar-picker .el-select {
+    width: min(215px, 66vw);
+  }
+
+  .guide-stage-presence {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .guide-stage-pane .guide-assistant-avatar {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    border-radius: 16px;
+  }
+
+  .guide-stage-pane .guide-avatar-state {
+    top: 11px;
+    right: auto;
+    bottom: auto;
+    left: 10px;
+  }
+
+  .guide-stage-caption {
+    position: absolute;
+    z-index: 5;
+    right: 10px;
+    bottom: 9px;
+    left: 10px;
+    width: auto;
+    max-height: 82px;
+    padding: 10px 12px 9px;
+    border-radius: 12px 12px 12px 4px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 8px 22px rgba(25, 75, 67, 0.12);
+    backdrop-filter: blur(8px);
+  }
+
+  .guide-stage-caption::before,
+  .guide-stage-caption > span {
+    display: none;
+  }
+
+  .guide-stage-caption strong {
+    margin: 0;
+    font-family: inherit;
+    font-size: 12px;
+  }
+
+  .guide-stage-caption p {
+    margin-top: 3px;
+    font-size: 12px;
+    line-height: 1.5;
+    -webkit-line-clamp: 2;
+  }
+
+  .guide-stage-pane > .guide-avatar-error {
+    position: absolute;
+    z-index: 9;
+    right: 12px;
+    bottom: 8px;
+    left: 12px;
+    margin: 0;
+  }
+
+  .guide-chat-pane {
+    border-top: 0;
+  }
+
+  .guide-chat-pane .guide-message-stream {
+    gap: 15px;
+    padding: 16px 13px 24px;
+    scroll-behavior: smooth;
+  }
+
+  .guide-chat-pane .guide-message {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .guide-chat-pane .guide-message-avatar {
+    width: 29px;
+    height: 29px;
+  }
+
+  .guide-chat-pane .guide-message-content {
+    padding: 12px 13px;
+    font-size: 13px;
+    line-height: 1.75;
+  }
+
+  .guide-message-content.is-collapsible:not(.is-expanded) {
+    position: relative;
+    display: -webkit-box;
+    max-height: 12.25em;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 7;
+  }
+
+  .guide-message-content.is-collapsible:not(.is-expanded)::after {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 3.3em;
+    content: "";
+    pointer-events: none;
+    background: linear-gradient(transparent, #fff 76%);
+  }
+
+  .guide-answer-expand {
+    display: inline-flex;
+    margin-top: 6px;
+    padding: 4px 0;
+    border: 0;
+    color: #167168;
+    background: transparent;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 750;
+  }
+
+  .guide-answer-actions {
+    margin-top: 7px;
+  }
+
+  .guide-sources {
+    margin-top: 8px;
+  }
+
+  .guide-chat-pane .guide-feedback-card {
+    margin-bottom: 0;
+  }
+
+  .guide-chat-pane .guide-composer {
+    gap: 6px;
+    padding: 9px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .guide-composer-mode {
+    display: none;
+  }
+
+  .guide-composer .el-textarea__inner {
+    min-height: 44px !important;
+    max-height: 82px;
+  }
+
+  .guide-composer-actions .el-button {
+    min-height: 38px;
+  }
+
+  .guide-return-latest {
+    right: 14px;
+    bottom: 114px;
+  }
+
+}
+
 /* Administrator avatar studio */
 .avatar-management-page {
   --avatar-ink: #173f3d;

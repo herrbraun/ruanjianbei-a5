@@ -20,11 +20,14 @@ import { resolveAssetUrl } from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
 import { useScenicStore } from '@/stores/scenic'
 
-defineProps<{
+withDefaults(defineProps<{
   title: string
   description: string
   roleLabel: string
-}>()
+  immersive?: boolean
+}>(), {
+  immersive: false,
+})
 
 interface NavigationItem {
   label: string
@@ -131,7 +134,7 @@ function switchScenicArea() {
         <span class="mobile-role">{{ roleName }}</span>
       </header>
 
-      <main id="main-content" class="page-container" tabindex="-1">
+      <main id="main-content" class="page-container" :class="{ 'is-immersive': immersive }" tabindex="-1">
         <header class="page-header">
           <div>
             <p class="page-eyebrow">{{ roleLabel }}</p>
