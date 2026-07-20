@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build && node scripts/copy-avatar-animations.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:unit": "node --test --experimental-strip-types tests/*.test.ts"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",

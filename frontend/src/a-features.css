@@ -850,6 +850,13 @@
   width: 220px;
 }
 
+.analytics-refresh-status {
+  align-self: center;
+  color: #66736e;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .guide-metric-grid .metric-card.is-alert {
   border-color: #e2b7ad;
   background: linear-gradient(145deg, #fff, #fff7f5);

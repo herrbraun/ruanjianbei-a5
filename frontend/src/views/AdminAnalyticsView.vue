@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Refresh } from '@element-plus/icons-vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import {
@@ -16,6 +16,7 @@ import {
 import { knowledgeApi, type ScenicArea } from '@/api/knowledge'
 import InsightChart from '@/components/InsightChart.vue'
 import AppLayout from '@/layouts/AppLayout.vue'
+import { AUTO_REFRESH_INTERVAL_MS, isPeriodicRefreshDue } from '@/utils/periodicRefresh'
 
 const router = useRouter()
 const loading = ref(false)
@@ -25,6 +26,14 @@ const overview = ref<AnalyticsOverview | null>(null)
 const routeAnalytics = ref<RouteAnalytics | null>(null)
 const spotAnalytics = ref<SpotAnalytics | null>(null)
 const guideDashboard = ref<GuideDashboard | null>(null)
+const lastSuccessfulRefreshAt = ref<number>()
+let autoRefreshTimer: number | undefined
+let pageActive = false
+
+const lastUpdatedText = computed(() => {
+  if (lastSuccessfulRefreshAt.value === undefined) return '尚未成功更新'
+  return `最近更新 ${new Date(lastSuccessfulRefreshAt.value).toLocaleTimeString('zh-CN', { hour12: false })}`
+})
 
 function dateText(date: Date) {
   const year = date.getFullYear()
@@ -116,8 +125,8 @@ const satisfactionOption = computed(() => ({
 const routeTrendOption = computed(() => ({ ...chartBase, xAxis: { type: 'category', data: routeAnalytics.value?.daily_routes.map((item) => item.date) || [] }, yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#EDF1EF' } } }, series: [{ type: 'line', smooth: true, data: routeAnalytics.value?.daily_routes.map((item) => item.count) || [], lineStyle: { color: '#1F6D63', width: 3 }, itemStyle: { color: '#B8892D' } }] }))
 const spotOption = computed(() => { const rows = (spotAnalytics.value?.route_popular_spots || []).filter((item) => item.selected_count > 0).slice(0, 8).reverse(); return { ...chartBase, xAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#EDF1EF' } } }, yAxis: { type: 'category', data: rows.map((item) => item.name), axisLine: { show: false }, axisTick: { show: false } }, series: [{ type: 'bar', data: rows.map((item) => item.selected_count), itemStyle: { color: '#B8892D', borderRadius: [0, 4, 4, 0] }, barMaxWidth: 22 }] } })
 
-async function loadAnalytics() {
-  if (!selectedScenicAreaId.value) return
+async function loadAnalytics(): Promise<boolean> {
+  if (!selectedScenicAreaId.value || loading.value) return false
   loading.value = true
   try {
     const [overviewResponse, routesResponse, spotsResponse, guideResponse] = await Promise.all([
@@ -128,11 +137,35 @@ async function loadAnalytics() {
     routeAnalytics.value = routesResponse.data
     spotAnalytics.value = spotsResponse.data
     guideDashboard.value = guideResponse.data
+    lastSuccessfulRefreshAt.value = Date.now()
+    return true
   } catch {
     ElMessage.error('运营统计加载失败，请检查服务后重试')
+    return false
   } finally {
     loading.value = false
   }
+}
+
+function refreshWhenDue() {
+  if (document.visibilityState !== 'visible' || loading.value) return
+  if (isPeriodicRefreshDue(lastSuccessfulRefreshAt.value, Date.now())) void loadAnalytics()
+}
+
+function runScheduledRefresh() {
+  if (document.visibilityState === 'visible' && !loading.value) void loadAnalytics()
+}
+
+function startAutoRefresh() {
+  if (autoRefreshTimer !== undefined) window.clearInterval(autoRefreshTimer)
+  autoRefreshTimer = window.setInterval(runScheduledRefresh, AUTO_REFRESH_INTERVAL_MS)
+  document.addEventListener('visibilitychange', refreshWhenDue)
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshTimer !== undefined) window.clearInterval(autoRefreshTimer)
+  autoRefreshTimer = undefined
+  document.removeEventListener('visibilitychange', refreshWhenDue)
 }
 
 async function initialize() {
@@ -149,12 +182,23 @@ function openInsights() {
   router.push({ path: '/admin/insights', query: selectedScenicAreaId.value ? { scenic_area_id: selectedScenicAreaId.value } : undefined })
 }
 
-onMounted(initialize)
+onMounted(async () => {
+  pageActive = true
+  await initialize()
+  if (pageActive) startAutoRefresh()
+})
+onBeforeUnmount(() => {
+  pageActive = false
+  stopAutoRefresh()
+})
 </script>
 
 <template>
   <AppLayout title="运营概览" description="查看讲解使用、游客感受、路线热度和景点表现。" role-label="景区运营">
-    <template #actions><el-button :icon="Refresh" :loading="loading" @click="loadAnalytics">刷新</el-button></template>
+    <template #actions>
+      <span class="analytics-refresh-status">每 5 分钟自动刷新 · {{ lastUpdatedText }}</span>
+      <el-button :icon="Refresh" :loading="loading" @click="loadAnalytics">刷新</el-button>
+    </template>
 
     <section class="analytics-filter-bar">
       <el-select v-model="selectedScenicAreaId" placeholder="选择景区" @change="loadAnalytics">
