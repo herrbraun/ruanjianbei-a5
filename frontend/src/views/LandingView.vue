@@ -56,7 +56,7 @@ onMounted(loadScenicAreas)
   <main class="landing-page">
     <div class="landing-grain" aria-hidden="true" />
     <header class="landing-header">
-      <a class="landing-brand" href="#main"><span>灵</span><div><strong>灵境智游</strong><small>无锡景区导览</small></div></a>
+      <div class="landing-brand"><span>灵</span><div><strong>灵境智游</strong><small>无锡景区导览</small></div></div>
       <RouterLink class="admin-entrance" to="/admin/login" aria-label="管理员入口" title="管理员入口"><el-icon><Lock /></el-icon><span>管理员入口</span></RouterLink>
     </header>
 
