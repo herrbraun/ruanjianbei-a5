@@ -94,6 +94,21 @@ Authorization: Bearer <jwt-token>
 
 返回当前登录用户信息。
 
+## 管理员修改密码
+
+`POST /auth/admin/change-password`
+
+仅管理员可调用。请求头需携带管理员 Bearer Token，请求体如下：
+
+```json
+{
+  "current_password": "current-password",
+  "new_password": "new-password-at-least-12-chars"
+}
+```
+
+新密码须为 12–64 个字符且 UTF-8 编码不超过 72 字节，并且不能与当前密码相同。修改成功返回 `204 No Content`；前端会退出当前登录并跳转至管理员登录页。
+
 - `GET /auth/interests`：读取可选兴趣标签。
 - `PATCH /auth/me`：保存匿名游客在路线页按需选择的兴趣标签。
 

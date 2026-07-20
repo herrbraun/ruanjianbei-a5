@@ -33,6 +33,7 @@ from app.database import get_db
 from app.models.spot import SpotTag
 from app.models.user import User
 from app.schemas.auth import (
+    AdminPasswordChangeRequest,
     AdminLoginRequest,
     AuthResponse,
     GuestAuthResponse,
@@ -275,6 +276,20 @@ def admin_login(payload: AdminLoginRequest, request: Request, db: Session = Depe
 
     add_login_log(db, user=user, ip_address=get_client_ip(request))
     return issue_auth_response(user)
+
+
+@router.post("/admin/change-password", status_code=status.HTTP_204_NO_CONTENT)
+def change_admin_password(
+    payload: AdminPasswordChangeRequest,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> Response:
+    if not current_user.password_hash or not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="当前密码不正确")
+    if verify_password(payload.new_password, current_user.password_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="新密码不能与当前密码相同")
+    update_password(db, current_user, payload.new_password)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/interests", response_model=InterestOptionsResponse)

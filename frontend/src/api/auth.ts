@@ -32,6 +32,10 @@ export function adminLogin(payload: { username: string; password: string }) {
   return http.post<AuthResponse>('/auth/admin-login', payload)
 }
 
+export function changeAdminPassword(payload: { current_password: string; new_password: string }) {
+  return http.post<void>('/auth/admin/change-password', payload)
+}
+
 export function getInterestOptions() {
   return http.get<{ interests: string[] }>('/auth/interests')
 }

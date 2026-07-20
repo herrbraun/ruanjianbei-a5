@@ -68,6 +68,13 @@ class PasswordChangeRequest(BaseModel):
     _new_password_bytes = field_validator("new_password")(validate_password_bytes)
 
 
+class AdminPasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=100)
+    new_password: str = Field(min_length=12, max_length=64)
+
+    _password_bytes = field_validator("current_password", "new_password")(validate_password_bytes)
+
+
 class UsernameAvailabilityResponse(BaseModel):
     available: bool
     suggestions: list[str] = Field(default_factory=list)
