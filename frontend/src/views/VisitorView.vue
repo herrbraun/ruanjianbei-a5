@@ -613,7 +613,7 @@ onBeforeUnmount(() => {
             <p>{{ currentRouteSpot.reason }}</p>
           </div>
           <div class="guide-route-actions">
-            <el-button size="small" :icon="ArrowLeft" :disabled="!hasPreviousRouteSpot || routeControlsBusy" @click="moveRoute(-1)">上一站</el-button>
+            <el-button size="small" :icon="ArrowLeft" :disabled="!hasPreviousRouteSpot || routeControlsBusy" @click="moveRoute(-1)">上一站并讲解</el-button>
             <el-button size="small" plain :disabled="routeControlsBusy" @click="sendRouteIntroduction()">讲解当前站</el-button>
             <el-button size="small" type="primary" :icon="ArrowRight" :disabled="!hasNextRouteSpot || routeControlsBusy" @click="moveRoute(1)">下一站并讲解</el-button>
           </div>
