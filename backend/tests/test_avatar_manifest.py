@@ -117,6 +117,48 @@ def test_avatar_seed_assigns_volcengine_voice_by_gender(tmp_path: Path) -> None:
     engine.dispose()
 
 
+def test_avatar_seed_updates_existing_display_metadata(tmp_path: Path) -> None:
+    content = _valid_glb()
+    (tmp_path / "guide.vrm").write_bytes(content)
+    manifest = _manifest(tmp_path / "manifest.json", digest=content_sha256(content), size=len(content))
+    engine = create_engine(
+        "sqlite+pysqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    testing_session = sessionmaker(bind=engine)
+    with testing_session() as db:
+        db.add(ScenicArea(code="lingshan", name="灵山胜境", is_enabled=True))
+        db.commit()
+
+    seed(manifest, session_factory=testing_session)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["avatars"][0].update(
+        role_title="人文典故讲解员",
+        introduction="人文典故讲解员，服务于灵山景区数字导览。",
+        tts_instructions="以庄重、平和的语气讲解人文典故与参观礼仪。",
+        outfit_name="中式雅正装",
+        original_filename="Lingshan Humanities Guide.vrm",
+    )
+    manifest.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    seed(manifest, session_factory=testing_session)
+
+    with testing_session() as db:
+        human = db.scalar(select(DigitalHuman).where(DigitalHuman.name == "测试讲解员"))
+        variants = list(db.scalars(select(AvatarVariant)))
+        assert human is not None
+        assert human.role_title == "人文典故讲解员"
+        assert human.introduction == "人文典故讲解员，服务于灵山景区数字导览。"
+        assert human.tts_instructions == "以庄重、平和的语气讲解人文典故与参观礼仪。"
+        assert len(variants) == 1
+        assert variants[0].outfit_name == "中式雅正装"
+        assert variants[0].original_filename == "Lingshan Humanities Guide.vrm"
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+
+
 def test_avatar_seed_rolls_back_everything_on_database_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

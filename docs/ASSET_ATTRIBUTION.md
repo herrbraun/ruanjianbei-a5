@@ -1,5 +1,14 @@
 # 第三方数字人动作素材说明
 
+## VRM 数字人模型
+
+- 文件：`backend/uploads/avatars/*.vrm`（共 10 个）
+- 制作工具：VRoid Studio 2.14.0
+- VRM 作者元数据：`AI Tour Guide Team`
+- 项目来源记录：团队在 VRoid Studio 中自制，没有记录使用 VRoid Hub、BOOTH 或其他第三方模型与付费纹理。
+- 商用依据：VRoid Studio 官方允许个人和企业商业使用由正式版导出的模型及未标注特殊条款的内置素材；自行制作的纹理和发型网格权利归创作者。若后续加入第三方纹理、服装、发型或特殊许可素材，必须在本文件登记来源和授权条件后才能用于商业发布。
+- 注意：VRM 内的作者和版权元数据只能作为项目声明，不能代替原始 `.vroid` 工程、制作记录或第三方素材授权凭证。正式商业发布前应保留这些证据并完成一次资产清单复核。
+
 ## 自然待机循环
 
 - 文件：`frontend/public/animations/chatvrm-idle-loop.vrma`

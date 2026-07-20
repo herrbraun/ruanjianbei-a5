@@ -117,13 +117,20 @@ def seed(
                 )
                 db.add(human)
                 db.flush()
-            variant = db.scalar(
-                select(AvatarVariant).where(
-                    AvatarVariant.digital_human_id == human.id,
-                    AvatarVariant.outfit_name == item.outfit_name,
-                    AvatarVariant.version == item.version,
+            else:
+                human.gender = item.gender
+                human.role_title = item.role_title
+                human.introduction = item.introduction
+                human.tts_instructions = item.tts_instructions
+            variant = db.scalar(select(AvatarVariant).where(AvatarVariant.stored_filename == item.stored_filename))
+            if variant is None:
+                variant = db.scalar(
+                    select(AvatarVariant).where(
+                        AvatarVariant.digital_human_id == human.id,
+                        AvatarVariant.outfit_name == item.outfit_name,
+                        AvatarVariant.version == item.version,
+                    )
                 )
-            )
             if variant is None:
                 variant = AvatarVariant(
                     digital_human_id=human.id,
@@ -136,6 +143,13 @@ def seed(
                 )
                 db.add(variant)
                 db.flush()
+            else:
+                variant.digital_human_id = human.id
+                variant.outfit_name = item.outfit_name
+                variant.version = item.version
+                variant.original_filename = item.original_filename
+                variant.content_hash = item.sha256
+                variant.file_size = item.file_size
             existing = db.scalar(
                 select(ScenicAvatarConfig)
                 .where(
